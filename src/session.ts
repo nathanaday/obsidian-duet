@@ -10,6 +10,8 @@ export interface SessionOptions {
   /** Variables added to the inherited environment, for example `CLAUDE_CONFIG_DIR`. */
   env?: Record<string, string>;
   model?: string;
+  /** Instructions added to the harness's own system prompt. They apply to every turn of a new session. */
+  instructions?: string;
   /** Session id from an earlier `AgentSession.id`. The agent continues that conversation. */
   resume?: string;
   /** Called when the agent wants to use a tool that needs approval. With no handler, the session denies the request. */

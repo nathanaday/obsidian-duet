@@ -66,6 +66,9 @@ export class ClaudeSession extends BaseSession {
         pathToClaudeCodeExecutable: executable,
         model: options.model,
         permissionMode: options.permissionMode ?? 'default',
+        ...(options.instructions && {
+          systemPrompt: { type: 'preset', preset: 'claude_code', append: options.instructions },
+        }),
         includePartialMessages: true,
         canUseTool: this.canUseTool,
         stderr: (data) => {

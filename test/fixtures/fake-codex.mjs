@@ -6,6 +6,7 @@ const THREAD = 'thread-1';
 let nextId = 1000;
 let turnCount = 0;
 let activeTurn;
+let instructions = null;
 const waiting = new Map();
 
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\n');
@@ -68,6 +69,9 @@ async function runTurn(prompt) {
     case 'fail':
       notify('error', { turnId: activeTurn, willRetry: false, error: { message: 'model overloaded' } });
       return complete('failed', null);
+    case 'instructions':
+      reply(String(instructions));
+      return complete();
     case 'wait':
       return; // Ends on turn/interrupt.
     case 'crash':
@@ -93,6 +97,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     case 'initialized':
       return;
     case 'thread/start':
+      instructions = params.developerInstructions;
       return send({ id, result: { thread: { id: THREAD }, model: 'fake', cwd: params.cwd } });
     case 'thread/resume':
       if (params.threadId !== THREAD) {

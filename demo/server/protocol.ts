@@ -1,9 +1,6 @@
-import type { AgentEvent, Harness, PermissionDecision } from '../../src/index.ts';
+import type { AgentEvent, ApprovalSetting, Harness, PermissionDecision } from '../../src/index.ts';
 
-export type { AgentEvent, Harness, PermissionDecision };
-
-/** Approval settings the demo offers. The server maps each one to a harness option. */
-export type ApprovalSetting = 'ask' | 'accept-edits' | 'plan' | 'sandbox';
+export type { AgentEvent, ApprovalSetting, Harness, PermissionDecision };
 
 export interface DemoInfo {
   harnesses: Record<Harness, { available: boolean; error?: string }>;

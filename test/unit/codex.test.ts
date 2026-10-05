@@ -73,6 +73,11 @@ describe('codex adapter', () => {
     expect(JSON.parse((await denied.session.send('permissions')).text)).toEqual({ permissions: {}, scope: 'turn' });
   });
 
+  it('passes instructions to the thread as developer instructions', async () => {
+    session = await startCodexSession({ cwd: process.cwd(), clientName: 'test', executablePath: FAKE, instructions: 'Be brief.' });
+    expect((await session.send('instructions')).text).toBe('Be brief.');
+  });
+
   it('denies requests when there is no permission handler', async () => {
     session = await startCodexSession({ cwd: process.cwd(), clientName: 'test', executablePath: FAKE });
     expect(JSON.parse((await session.send('command')).text)).toEqual({ decision: 'decline' });

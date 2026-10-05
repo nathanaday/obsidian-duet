@@ -112,6 +112,7 @@ export class CodexSession extends BaseSession {
       model: this.options.model ?? null,
       approvalPolicy: this.options.approvalPolicy ?? 'on-request',
       sandbox: this.options.sandbox ?? 'workspace-write',
+      developerInstructions: this.options.instructions ?? null,
     };
     const response = this.options.resume
       ? await this.rpc.request<ThreadStartResponse>('thread/resume', {

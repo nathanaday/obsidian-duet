@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 import {
   type AgentSession,
+  approvalOptions,
   type CreateSessionOptions,
   createSession,
   findExecutable,
@@ -65,13 +66,10 @@ class HostedSession {
 }
 
 function harnessOptions({ harness, approval, userTools }: StartRequest): Partial<CreateSessionOptions> {
-  if (harness === 'claude') {
-    return {
-      permissionMode: approval === 'accept-edits' ? 'acceptEdits' : approval === 'plan' ? 'plan' : 'default',
-      sdkOptions: { strictMcpConfig: !userTools },
-    };
-  }
-  return { approvalPolicy: approval === 'sandbox' ? 'on-request' : 'untrusted', sandbox: 'workspace-write' };
+  return {
+    ...approvalOptions(harness, approval),
+    ...(harness === 'claude' && { sdkOptions: { strictMcpConfig: !userTools } }),
+  };
 }
 
 /** Hosts agent sessions in the Vite dev server and exposes them under /api. */
