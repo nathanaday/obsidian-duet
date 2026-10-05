@@ -8,6 +8,8 @@ One interface covers both harnesses. You write a UI once, and it works with Clau
 
 Status: in development.
 
+![The demo app: Claude asks to edit a note, and the event log shows each event the session emitted](docs/demo.png)
+
 ## Quickstart
 
 ### Prerequisites
@@ -22,6 +24,14 @@ Status: in development.
 ```sh
 npm install
 ```
+
+### Try the demo
+
+```sh
+npm run demo
+```
+
+Open http://localhost:5199, choose Claude Code or Codex, and start a session. Each session works on a fresh copy of a small sample vault unless you enter your own folder. The panel on the right lists every event the session emits, so you can see how a turn, a tool call and an approval move through the library.
 
 ### Chat from the terminal
 
@@ -71,6 +81,7 @@ await session.close();
 npm test            # unit tests, with a fake Codex server; no network
 npm run test:live   # the same scenarios against the real harnesses; uses your accounts
 npm run bundle      # builds dist/agent-helenite.cjs the way an Obsidian plugin does
+npm run typecheck
 ```
 
 ## Patterns and conventions
@@ -87,6 +98,7 @@ Full rationale in [docs/design.md](docs/design.md).
 - Design notes: [docs/design.md](docs/design.md)
 - Library source: [src/](src/)
 - Terminal chat client: [src/cli/chat.ts](src/cli/chat.ts)
+- Demo app (Vite and Vue, with the session server as Vite middleware): [demo/](demo/)
 
 External:
 

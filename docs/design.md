@@ -46,6 +46,14 @@ Both harnesses ignore an interrupt that arrives before the turn starts on their 
 
 Each adapter records whether the turn has started (`turn/started` for Codex; `system/init`, a stream event or an assistant message for Claude Code). An interrupt before that point waits until the turn starts. The fake Codex server in `test/fixtures` copies the Codex behavior, so a unit test covers this case.
 
+## What a UI receives
+
+Adapters normalize what they show, so every UI gets the same thing from both harnesses:
+
+- File paths inside the working directory are relative (`Ideas.md`, not `/private/var/.../Ideas.md`). Harnesses often report the resolved path, so the comparison also uses the resolved working directory.
+- Codex runs commands as `/bin/zsh -lc '<command>'`. Titles show the inner command. The permission detail keeps the full command.
+- The detail of a file-change request is a line diff: each line starts with ' ', '-' or '+'. Claude Code sends the old and new text of an edit, and the adapter computes the diff. Codex sends a unified diff.
+
 ## Finding the harness binary
 
 An app that starts from the macOS Dock, such as Obsidian, gets only the system PATH (`/usr/bin:/bin:/usr/sbin:/sbin`). The harness binaries are not on that PATH. `codex` is also a Node script, so it needs `node` on the PATH.
@@ -59,6 +67,14 @@ An Obsidian plugin is one CommonJS file. The Claude Agent SDK is ESM and calls `
 The bundle is about 900 KB. The SDK, zod and ajv make up most of it.
 
 Obsidian plugins that start processes work only on desktop. The plugin manifest must set `isDesktopOnly: true`.
+
+## Claude Code loads the user's setup
+
+A session starts Claude Code with the user's settings, plugins and MCP servers, as `claude` does in a terminal. Claude may then mention, for example, connectors that need a sign-in. `sdkOptions` passes any Agent SDK option through. `{ strictMcpConfig: true }` loads only the MCP servers that the caller passes. The demo uses it unless the user selects "Load my MCP servers and plugins".
+
+## The demo app
+
+`demo/` is a Vite and Vue app. `demo/server/api.ts` is a Vite plugin that hosts sessions inside the dev server, so one command starts everything. The browser receives events over Server-Sent Events and sends messages, approvals and interrupts as POST requests. The server keeps each session's event log and replays it when the browser reconnects.
 
 ## Licensing and accounts
 
