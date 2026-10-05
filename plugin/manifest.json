@@ -1,0 +1,9 @@
+{
+  "id": "helenite",
+  "name": "Helenite",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.0",
+  "description": "Mention Claude Code or Codex on a line of a note and get the answer in the note.",
+  "author": "nathanaday",
+  "isDesktopOnly": true
+}

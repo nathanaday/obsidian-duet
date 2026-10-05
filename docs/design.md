@@ -76,6 +76,32 @@ A session starts Claude Code with the user's settings, plugins and MCP servers, 
 
 `demo/` is a Vite and Vue app. `demo/server/api.ts` is a Vite plugin that hosts sessions inside the dev server, so one command starts everything. The browser receives events over Server-Sent Events and sends messages, approvals and interrupts as POST requests. The server keeps each session's event log and replays it when the browser reconnects.
 
+## The Obsidian plugin
+
+### Finding the reply while the note changes
+
+The reply callout must stay findable while the user types above it and while the agent edits the same note on disk. Positions do not survive either change, so the callout title carries a hidden marker while the reply is in progress: `> [!agent]+ Claude %%h:k3x9q2%%`. `%%…%%` is an Obsidian comment, so reading view and live preview do not show it. Every write finds the callout by its marker and replaces it whole. The marker goes away with the final write.
+
+When the note is open, writes go through CodeMirror with `addToHistory` off, so Cmd+Z undoes the user's typing and not the agent's text. When the note is closed, writes go through `vault.process`.
+
+### One conversation per note
+
+Each note and agent pair has one session. The session ids are saved with the plugin settings, keyed by note path, and follow renames. A session that is idle for 15 minutes closes its process. The next mention resumes the conversation from the saved id.
+
+Events reach the right callout through a queue: each mention adds a reply to its session's queue, and each `turn-start` takes the next one.
+
+### Turns the user did not ask for
+
+Claude Code can run a command in the background and end its turn at once. When the command finishes, Claude Code starts a new turn by itself. A note has no place for that reply, so the plugin sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` for Claude sessions, and the instructions ask both agents to wait for commands. A turn that starts without a mention still gets a "(follow-up)" callout at the end of the note.
+
+### Node's events module in Electron
+
+In Obsidian's renderer, `AbortController` is the browser's. The Claude Agent SDK calls `events.setMaxListeners(n, signal)`, and Node rejects a browser `AbortSignal`. The bundle maps `events` to `scripts/shims/node-events.cjs`, which forwards everything to Node's module except that `setMaxListeners` skips browser event targets. The plugin does not patch the global module, so other plugins are not affected.
+
+### Testing in a separate Obsidian
+
+`test/obsidian/harness.ts` starts Obsidian with `--user-data-dir` set to a temporary profile and `--remote-debugging-port`, so it runs beside the user's own Obsidian and does not share its settings or vaults. Playwright connects over the Chrome DevTools Protocol and types into the editor as a user does. The harness enables the plugin once with `enablePluginAndSave`. If the plugin is also listed in `community-plugins.json`, turning on community plugins loads a second instance.
+
 ## Licensing and accounts
 
 agent-helenite does not include either harness. It runs the binary that the user installed, with the user's own login. The Claude Agent SDK package is not open source ("All rights reserved", under Anthropic's commercial terms). The plugin bundles the SDK's JavaScript but not its native binary. Anthropic's terms do not let a third-party product offer claude.ai subscription login unless Anthropic approves it. Read the current terms before you publish the plugin.

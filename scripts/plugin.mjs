@@ -1,0 +1,41 @@
+// Builds the Obsidian plugin into plugin/dist.
+//   node scripts/plugin.mjs                  build once
+//   node scripts/plugin.mjs --vault <dir>    also install into <dir>/.obsidian/plugins/helenite
+//   node scripts/plugin.mjs --watch          rebuild and reinstall on every change
+import { copyFile, mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import { parseArgs } from 'node:util';
+import { context } from 'esbuild';
+import { obsidianBundle } from './esbuild-options.mjs';
+
+const { values } = parseArgs({ options: { vault: { type: 'string' }, watch: { type: 'boolean' } } });
+const DIST = 'plugin/dist';
+const targets = [DIST, ...(values.vault ? [path.join(values.vault, '.obsidian/plugins/helenite')] : [])];
+
+async function install() {
+  for (const target of targets) {
+    await mkdir(target, { recursive: true });
+    if (target !== DIST) await copyFile(path.join(DIST, 'main.js'), path.join(target, 'main.js'));
+    await copyFile('plugin/manifest.json', path.join(target, 'manifest.json'));
+    await copyFile('plugin/styles.css', path.join(target, 'styles.css'));
+  }
+  console.log(`Plugin built${values.vault ? ` and installed in ${values.vault}` : ''}.`);
+}
+
+const ctx = await context({
+  ...obsidianBundle,
+  entryPoints: ['plugin/src/main.ts'],
+  outfile: path.join(DIST, 'main.js'),
+  logLevel: 'warning',
+  plugins: [
+    ...obsidianBundle.plugins,
+    { name: 'install', setup: (build) => build.onEnd((result) => (result.errors.length ? undefined : install())) },
+  ],
+});
+
+if (values.watch) {
+  await ctx.watch();
+} else {
+  await ctx.rebuild();
+  await ctx.dispose();
+}

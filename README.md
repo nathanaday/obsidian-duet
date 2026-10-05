@@ -4,7 +4,7 @@
 
 Claude Code and Codex are strong coding agents, but you usually reach them through a terminal. agent-helenite lets a TypeScript app run an agent session directly. The app starts the harness, sends messages, streams the replies, and shows tool approvals in its own UI. No terminal is necessary.
 
-One interface covers both harnesses. You write a UI once, and it works with Claude Code and with Codex. The project is the base for an Obsidian plugin, in which you mention an agent on a line of a note and the agent answers in the note.
+One interface covers both harnesses. You write a UI once, and it works with Claude Code and with Codex. The project includes an [Obsidian plugin](plugin/README.md): you mention an agent on a line of a note, and the agent answers in the note.
 
 Status: in development.
 
@@ -81,6 +81,7 @@ await session.close();
 npm test            # unit tests, with a fake Codex server; no network
 npm run test:live   # the same scenarios against the real harnesses; uses your accounts
 npm run bundle      # builds dist/agent-helenite.cjs the way an Obsidian plugin does
+npm run plugin:build && npm run test:obsidian   # drives the plugin in a separate Obsidian
 npm run typecheck
 ```
 
@@ -99,6 +100,7 @@ Full rationale in [docs/design.md](docs/design.md).
 - Library source: [src/](src/)
 - Terminal chat client: [src/cli/chat.ts](src/cli/chat.ts)
 - Demo app (Vite and Vue, with the session server as Vite middleware): [demo/](demo/)
+- Obsidian plugin: [plugin/README.md](plugin/README.md)
 
 External:
 
