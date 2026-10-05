@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   type CanUseTool,
+  type Options,
   type PermissionMode,
   type PermissionResult,
   type Query,
@@ -9,12 +10,15 @@ import {
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk/core';
 import { AsyncQueue } from '../async-queue.ts';
-import { findExecutable, harnessEnvironment } from '../environment.ts';
+import { lineDiff } from '../diff.ts';
+import { findExecutable, harnessEnvironment, pathDisplay } from '../environment.ts';
 import { askPermission, BaseSession, type SessionOptions } from '../session.ts';
 
 export interface ClaudeSessionOptions extends SessionOptions {
   /** Default: `default`, which sends every tool that needs approval to `onPermission`. */
   permissionMode?: PermissionMode;
+  /** Extra Agent SDK options, for example `{ strictMcpConfig: true }`. They override the adapter's defaults. */
+  sdkOptions?: Partial<Options>;
 }
 
 const STDERR_LIMIT = 4096;
@@ -44,6 +48,7 @@ export class ClaudeSession extends BaseSession {
   /** Claude Code ignores an interrupt that arrives before it reads the user message. */
   private turnStarted = false;
   private stderr = '';
+  private readonly showPath: (file: string) => string;
 
   constructor(
     private readonly options: ClaudeSessionOptions,
@@ -52,6 +57,7 @@ export class ClaudeSession extends BaseSession {
   ) {
     super();
     this.id = options.resume ?? randomUUID();
+    this.showPath = pathDisplay(options.cwd);
     this.query = query({
       prompt: this.input,
       options: {
@@ -66,6 +72,7 @@ export class ClaudeSession extends BaseSession {
           this.stderr = (this.stderr + data).slice(-STDERR_LIMIT);
         },
         ...(options.resume ? { resume: options.resume } : { sessionId: this.id }),
+        ...options.sdkOptions,
       },
     });
   }
@@ -136,7 +143,7 @@ export class ClaudeSession extends BaseSession {
             this.finalMessage = block.text;
             this.emit({ type: 'message', text: block.text });
           } else if (block.type === 'tool_use') {
-            this.emit({ type: 'tool-start', id: block.id, tool: block.name, title: describeTool(block.name, block.input) });
+            this.emit({ type: 'tool-start', id: block.id, tool: block.name, title: this.describeTool(block.name, block.input) });
           }
         }
         break;
@@ -176,8 +183,8 @@ export class ClaudeSession extends BaseSession {
   private readonly canUseTool: CanUseTool = async (toolName, input, { signal, suggestions }) => {
     const decision = await askPermission(this.options.onPermission, {
       tool: toolName,
-      title: describeTool(toolName, input),
-      detail: toolDetail(toolName, input),
+      title: this.describeTool(toolName, input),
+      detail: this.toolDetail(toolName, input),
       raw: input,
       signal,
     });
@@ -191,6 +198,24 @@ export class ClaudeSession extends BaseSession {
           };
     return result;
   };
+
+  private describeTool(name: string, input: unknown): string {
+    const fields = (input ?? {}) as Record<string, unknown>;
+    if (typeof fields.file_path === 'string') return `${name} ${this.showPath(fields.file_path)}`;
+    const subject = fields.command ?? fields.pattern ?? fields.url ?? fields.description;
+    return typeof subject === 'string' ? `${name} ${subject}` : name;
+  }
+
+  private toolDetail(name: string, input: Record<string, unknown>): string {
+    if (name === 'Bash' && typeof input.command === 'string') return input.command;
+    if (name === 'Edit' && typeof input.old_string === 'string' && typeof input.new_string === 'string') {
+      return lineDiff(input.old_string, input.new_string);
+    }
+    if (name === 'Write' && typeof input.content === 'string') {
+      return input.content.split('\n').map((line) => `+${line}`).join('\n');
+    }
+    return JSON.stringify(input, null, 2);
+  }
 }
 
 function isTurnStart(message: SDKMessage): boolean {
@@ -200,21 +225,6 @@ function isTurnStart(message: SDKMessage): boolean {
     message.type === 'assistant' ||
     message.type === 'result'
   );
-}
-
-function describeTool(name: string, input: unknown): string {
-  const fields = (input ?? {}) as Record<string, unknown>;
-  const subject = fields.command ?? fields.file_path ?? fields.pattern ?? fields.url ?? fields.description;
-  return typeof subject === 'string' ? `${name} ${subject}` : name;
-}
-
-function toolDetail(name: string, input: Record<string, unknown>): string {
-  if (name === 'Bash' && typeof input.command === 'string') return input.command;
-  if (name === 'Edit' && typeof input.old_string === 'string') {
-    return `${input.file_path}\n--- old\n${input.old_string}\n+++ new\n${input.new_string}`;
-  }
-  if (name === 'Write' && typeof input.content === 'string') return `${input.file_path}\n${input.content}`;
-  return JSON.stringify(input, null, 2);
 }
 
 function toolResultText(content: unknown): string | undefined {

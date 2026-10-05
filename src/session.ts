@@ -21,7 +21,10 @@ export interface PermissionRequest {
   tool: string;
   /** Short one-line summary, at most 100 characters. */
   title: string;
-  /** Command text, diff or other content the user needs to see to decide. */
+  /**
+   * Content the user needs to see to decide: a command, or for a file change a diff whose lines
+   * start with ' ', '-' or '+' (Codex diffs also contain '@@' hunk headers).
+   */
   detail?: string;
   /** Raw request from the harness. */
   raw: unknown;

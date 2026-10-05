@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { findExecutable, harnessEnvironment } from '../../environment.ts';
+import { findExecutable, harnessEnvironment, pathDisplay } from '../../environment.ts';
 import {
   askPermission,
   BaseSession,
@@ -69,12 +69,14 @@ export class CodexSession extends BaseSession {
   private readonly items = new Map<string, ThreadItem>();
   private stderr = '';
   private readonly exited: Promise<void>;
+  private readonly showPath: (file: string) => string;
 
   constructor(
     private readonly child: ChildProcess,
     private readonly options: CodexSessionOptions,
   ) {
     super();
+    this.showPath = pathDisplay(options.cwd);
     child.stderr!.setEncoding('utf8').on('data', (chunk: string) => {
       this.stderr = (this.stderr + chunk).slice(-STDERR_LIMIT);
     });
@@ -196,7 +198,7 @@ export class CodexSession extends BaseSession {
 
   private itemStarted(item: ThreadItem): void {
     this.items.set(item.id, item);
-    const title = describeItem(item);
+    const title = this.describeItem(item);
     if (title) this.emit({ type: 'tool-start', id: item.id, tool: item.type, title });
   }
 
@@ -207,7 +209,7 @@ export class CodexSession extends BaseSession {
       this.emit({ type: 'message', text: item.text });
       return;
     }
-    if (!describeItem(item)) return;
+    if (!this.describeItem(item)) return;
     const status = 'status' in item ? item.status : 'completed';
     let ok = status === 'completed';
     let output: string | undefined;
@@ -238,14 +240,15 @@ export class CodexSession extends BaseSession {
         const detail = [request.command, request.reason && `Reason: ${request.reason}`]
           .filter(Boolean)
           .join('\n');
-        const decision = await ask('command', `Run ${request.command ?? 'a command'}`, detail);
+        const title = request.command ? `Run ${unwrapShell(request.command)}` : 'Run a command';
+        const decision = await ask('command', title, detail);
         return { decision: DECISIONS[decision] };
       }
       case 'item/fileChange/requestApproval': {
         const request = params as FileChangeApprovalParams;
         const item = this.items.get(request.itemId);
         const changes = item && 'changes' in item ? item.changes : [];
-        const paths = changes.map((change) => change.path).join(', ');
+        const paths = changes.map((change) => this.showPath(change.path)).join(', ');
         const detail = [request.reason, ...changes.map((change) => change.diff)].filter(Boolean).join('\n');
         const decision = await ask('fileChange', `Edit ${paths || 'files'}`, detail);
         return { decision: DECISIONS[decision] };
@@ -267,19 +270,27 @@ export class CodexSession extends BaseSession {
         throw new RpcError(-32601, `agent-helenite does not support ${method}`);
     }
   }
+
+  private describeItem(item: ThreadItem): string | undefined {
+    switch (item.type) {
+      case 'commandExecution':
+        return 'command' in item ? unwrapShell(item.command) : 'command';
+      case 'fileChange':
+        return 'changes' in item
+          ? `Edit ${item.changes.map((change) => this.showPath(change.path)).join(', ')}`
+          : 'Edit files';
+      case 'mcpToolCall':
+        return 'server' in item ? `${item.server}.${item.tool}` : 'MCP tool';
+      case 'webSearch':
+        return 'query' in item && item.query ? `Search: ${item.query}` : 'Web search';
+      default:
+        return undefined;
+    }
+  }
 }
 
-function describeItem(item: ThreadItem): string | undefined {
-  switch (item.type) {
-    case 'commandExecution':
-      return 'command' in item ? item.command : 'command';
-    case 'fileChange':
-      return 'changes' in item ? `Edit ${item.changes.map((change) => change.path).join(', ')}` : 'Edit files';
-    case 'mcpToolCall':
-      return 'server' in item ? `${item.server}.${item.tool}` : 'MCP tool';
-    case 'webSearch':
-      return 'query' in item && item.query ? `Search: ${item.query}` : 'Web search';
-    default:
-      return undefined;
-  }
+/** Codex runs commands as `/bin/zsh -lc '<command>'`. Titles show the inner command. */
+export function unwrapShell(command: string): string {
+  const match = command.match(/^\S*\/(?:ba|z)?sh -l?c (['"])([\s\S]*)\1$/);
+  return match?.[2] ?? command;
 }

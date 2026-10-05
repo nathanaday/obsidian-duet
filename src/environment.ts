@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { access, constants } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -49,6 +50,23 @@ export async function harnessEnvironment(
   ];
   env.PATH = [...new Set(dirs.filter(Boolean))].join(path.delimiter);
   return { ...env, ...extra };
+}
+
+/** Returns a function that shows a path relative to `cwd` when the path is inside it. */
+export function pathDisplay(cwd: string): (file: string) => string {
+  let real = cwd;
+  try {
+    real = realpathSync(cwd);
+  } catch {
+    // Keep the path as given.
+  }
+  return (file) => {
+    for (const root of [cwd, real]) {
+      const relative = path.relative(root, file);
+      if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) return relative;
+    }
+    return file;
+  };
 }
 
 /** Finds an executable on the PATH of `env`. Throws with an install hint when it is missing. */

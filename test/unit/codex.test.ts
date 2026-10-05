@@ -1,7 +1,7 @@
 import { chmodSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { startCodexSession } from '../../src/adapters/codex/session.ts';
+import { startCodexSession, unwrapShell } from '../../src/adapters/codex/session.ts';
 import type { AgentEvent, AgentSession, PermissionDecision, PermissionRequest } from '../../src/index.ts';
 
 const FAKE = fileURLToPath(new URL('../fixtures/fake-codex.mjs', import.meta.url));
@@ -136,6 +136,12 @@ describe('codex adapter', () => {
     await expect(
       startCodexSession({ cwd: process.cwd(), clientName: 'test', executablePath: '/nonexistent/codex' }),
     ).rejects.toThrow('ENOENT');
+  });
+
+  it('shows the inner command of a shell wrapper', () => {
+    expect(unwrapShell(`/bin/zsh -lc 'ls -a'`)).toBe('ls -a');
+    expect(unwrapShell(`/bin/bash -c "pwd && git status"`)).toBe('pwd && git status');
+    expect(unwrapShell('ls -a')).toBe('ls -a');
   });
 
   it('closes cleanly while idle', async () => {
