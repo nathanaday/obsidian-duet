@@ -1,0 +1,147 @@
+import { chmodSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { afterEach, describe, expect, it } from 'vitest';
+import { startCodexSession } from '../../src/adapters/codex/session.ts';
+import type { AgentEvent, AgentSession, PermissionDecision, PermissionRequest } from '../../src/index.ts';
+
+const FAKE = fileURLToPath(new URL('../fixtures/fake-codex.mjs', import.meta.url));
+chmodSync(FAKE, 0o755);
+
+let session: AgentSession | undefined;
+afterEach(async () => {
+  await session?.close();
+  session = undefined;
+});
+
+async function start(decision: PermissionDecision = 'allow', resume?: string) {
+  const requests: PermissionRequest[] = [];
+  const events: AgentEvent[] = [];
+  session = await startCodexSession({
+    cwd: process.cwd(),
+    clientName: 'test',
+    executablePath: FAKE,
+    resume,
+    onPermission: async (request) => {
+      requests.push(request);
+      return decision;
+    },
+  });
+  session.on((event) => events.push(event));
+  return { session, requests, events };
+}
+
+describe('codex adapter', () => {
+  it('streams a reply and resolves the turn', async () => {
+    const { session, events } = await start();
+    expect(session.id).toBe('thread-1');
+    const result = await session.send('hello');
+    expect(result).toEqual({ status: 'completed', text: 'Hello there' });
+    const deltas = events.filter((event) => event.type === 'text-delta').map((event) => event.text);
+    expect(deltas.join('')).toBe('Hello there');
+    expect(events[0]).toEqual({ type: 'turn-start', prompt: 'hello' });
+    expect(events.at(-1)).toEqual({ type: 'turn-end', result });
+  });
+
+  it.each([
+    ['allow', 'accept'],
+    ['allow-session', 'acceptForSession'],
+    ['deny', 'decline'],
+  ] as const)('maps %s to the command decision %s', async (decision, expected) => {
+    const { session, requests, events } = await start(decision);
+    const result = await session.send('command');
+    expect(JSON.parse(result.text)).toEqual({ decision: expected });
+    expect(requests[0]).toMatchObject({ tool: 'command', title: 'Run touch x' });
+    expect(events).toContainEqual({ type: 'tool-start', id: 'cmd-1', tool: 'commandExecution', title: 'touch x' });
+    expect(events).toContainEqual({ type: 'tool-end', id: 'cmd-1', ok: true, output: 'done' });
+  });
+
+  it('shows file paths and diffs in a file change request', async () => {
+    const { session, requests } = await start('allow');
+    const result = await session.send('file');
+    expect(JSON.parse(result.text)).toEqual({ decision: 'accept' });
+    expect(requests[0]).toMatchObject({ tool: 'fileChange', title: 'Edit a.md', detail: '-old\n+new' });
+  });
+
+  it('grants requested permissions only when allowed', async () => {
+    const allowed = await start('allow-session');
+    expect(JSON.parse((await allowed.session.send('permissions')).text)).toEqual({
+      permissions: { network: { enabled: true } },
+      scope: 'session',
+    });
+    await allowed.session.close();
+    const denied = await start('deny');
+    expect(JSON.parse((await denied.session.send('permissions')).text)).toEqual({ permissions: {}, scope: 'turn' });
+  });
+
+  it('denies requests when there is no permission handler', async () => {
+    session = await startCodexSession({ cwd: process.cwd(), clientName: 'test', executablePath: FAKE });
+    expect(JSON.parse((await session.send('command')).text)).toEqual({ decision: 'decline' });
+  });
+
+  it('answers unsupported server requests with an error', async () => {
+    const { session } = await start();
+    const error = JSON.parse((await session.send('unsupported')).text);
+    expect(error.code).toBe(-32601);
+  });
+
+  it('reports a failed turn with the last error', async () => {
+    const { session } = await start();
+    expect(await session.send('fail')).toEqual({ status: 'failed', text: '', error: 'model overloaded' });
+  });
+
+  it('interrupts a running turn and accepts the next message', async () => {
+    const { session } = await start();
+    const turn = session.send('wait');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await session.interrupt();
+    expect((await turn).status).toBe('interrupted');
+    expect((await session.send('hello')).status).toBe('completed');
+  });
+
+  it('interrupts a turn before turn/start returns', async () => {
+    const { session } = await start();
+    const turn = session.send('wait');
+    await session.interrupt();
+    expect((await turn).status).toBe('interrupted');
+  });
+
+  it('runs messages sent during a turn after it, in order', async () => {
+    const { session } = await start();
+    const results = await Promise.all([session.send('one'), session.send('two'), session.send('three')]);
+    expect(results.map((result) => result.text)).toEqual(['echo: one', 'echo: two', 'echo: three']);
+  });
+
+  it('fails the turn and closes the session when the process crashes', async () => {
+    const { session, events } = await start();
+    const result = await session.send('crash');
+    expect(result.status).toBe('failed');
+    expect(result.error).toContain('exited with code 3');
+    expect(result.error).toContain('fatal: something broke');
+    expect(session.closed).toBe(true);
+    expect(events.at(-1)).toMatchObject({ type: 'turn-end' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'closed' }));
+    await expect(session.send('hello')).rejects.toThrow('Session closed');
+  });
+
+  it('resumes a thread by id', async () => {
+    const { session } = await start('allow', 'thread-1');
+    expect(session.id).toBe('thread-1');
+  });
+
+  it('rejects when the thread to resume does not exist', async () => {
+    await expect(start('allow', 'missing')).rejects.toThrow('no rollout found');
+  });
+
+  it('rejects when the executable does not exist', async () => {
+    await expect(
+      startCodexSession({ cwd: process.cwd(), clientName: 'test', executablePath: '/nonexistent/codex' }),
+    ).rejects.toThrow('ENOENT');
+  });
+
+  it('closes cleanly while idle', async () => {
+    const { session, events } = await start();
+    await session.close();
+    expect(session.closed).toBe(true);
+    expect(events).toEqual([{ type: 'closed', error: undefined }]);
+  });
+});

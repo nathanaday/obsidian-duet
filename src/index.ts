@@ -1,0 +1,16 @@
+import { type ClaudeSessionOptions, startClaudeSession } from './adapters/claude.ts';
+import { type CodexSessionOptions, startCodexSession } from './adapters/codex/session.ts';
+import type { AgentSession } from './session.ts';
+
+export type CreateSessionOptions =
+  | ({ harness: 'claude' } & ClaudeSessionOptions)
+  | ({ harness: 'codex' } & CodexSessionOptions);
+
+/** Starts a harness process and resolves when the session is ready for `send`. */
+export function createSession(options: CreateSessionOptions): Promise<AgentSession> {
+  return options.harness === 'claude' ? startClaudeSession(options) : startCodexSession(options);
+}
+
+export type { ClaudeSessionOptions, CodexSessionOptions };
+export { findExecutable, harnessEnvironment } from './environment.ts';
+export * from './session.ts';
