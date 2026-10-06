@@ -76,11 +76,13 @@ Obsidian plugins that start processes work only on desktop. The plugin manifest 
 
 ## Claude Code loads the user's setup
 
-A session starts Claude Code with the user's settings, plugins and MCP servers, as `claude` does in a terminal. Claude may then mention, for example, connectors that need a sign-in. `sdkOptions` passes any Agent SDK option through. `{ strictMcpConfig: true }` loads only the MCP servers that the caller passes. The demo uses it unless the user selects "Load my MCP servers and plugins".
+A session starts Claude Code with the user's settings, plugins and MCP servers, as `claude` does in a terminal. Claude may then mention, for example, connectors that need a sign-in. `sdkOptions` passes any Agent SDK option through. `{ strictMcpConfig: true }` loads only the MCP servers that the caller passes. The plugin uses it unless the agent's setting "Load my MCP servers and plugins" is on.
 
-## The demo app
+## The library as a package
 
-`demo/` is a Vite and Vue app. `demo/server/api.ts` is a Vite plugin that hosts sessions inside the dev server, so one command starts everything. The browser receives events over Server-Sent Events and sends messages, approvals and interrupts as POST requests. The server keeps each session's event log and replays it when the browser reconnects.
+The library in `src/` is the base layer. The Obsidian plugin bundles it from source. Other apps use the package build: `npm run build:lib` writes ES modules and type declarations to `lib/`, and `package.json` exports them. The `prepare` script runs the build, so a git dependency installs a built package. The browser demo at [duet-demo](https://github.com/nathanaday/duet-demo) uses the library this way.
+
+`src/cli/` is a development tool. It is not part of the package.
 
 ## The Obsidian plugin
 

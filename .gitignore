@@ -5,3 +5,4 @@ node_modules/
 dist/
 plugin/dist/
 dev-vault/
+lib/

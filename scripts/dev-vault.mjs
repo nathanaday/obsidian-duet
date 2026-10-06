@@ -3,7 +3,7 @@ import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 
 const VAULT = 'dev-vault';
-await cp('demo/sample-vault', VAULT, { recursive: true, force: false, errorOnExist: false });
+await cp('test/fixtures/sample-vault', VAULT, { recursive: true, force: false, errorOnExist: false });
 await mkdir(`${VAULT}/.obsidian`, { recursive: true });
 await writeFile(`${VAULT}/.obsidian/community-plugins.json`, JSON.stringify(['duet']));
 execFileSync('node', ['scripts/plugin.mjs', '--vault', VAULT], { stdio: 'inherit' });

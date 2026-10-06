@@ -17,7 +17,7 @@ export interface ObsidianInstance {
 }
 
 export interface LaunchOptions {
-  /** The vault to copy. Default: the demo's sample vault. */
+  /** The vault to copy. Default: the sample vault in the test fixtures. */
   vault?: string;
   /** The plugin's data.json. */
   pluginData?: unknown;
@@ -27,7 +27,7 @@ export interface LaunchOptions {
  * Starts a separate Obsidian with its own profile and a fresh copy of a vault,
  * with the built plugin installed and enabled. The user's own Obsidian and vaults are not touched.
  */
-export async function launchObsidian({ vault: source = 'demo/sample-vault', pluginData }: LaunchOptions = {}): Promise<ObsidianInstance> {
+export async function launchObsidian({ vault: source = 'test/fixtures/sample-vault', pluginData }: LaunchOptions = {}): Promise<ObsidianInstance> {
   const root = await mkdtemp(path.join(tmpdir(), 'duet-obsidian-'));
   const vault = path.join(root, 'vault');
   const profile = path.join(root, 'profile');

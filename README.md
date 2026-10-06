@@ -137,11 +137,10 @@ Open `dev-vault/` as a vault in Obsidian. Other commands:
 | `npm test` | Runs the unit tests. |
 | `npm run test:obsidian` | Starts a separate Obsidian with a temporary vault and tests mentions and conversations with Claude Code and Codex. Your own Obsidian and vaults are not touched. |
 | `npm run screenshots` | Captures the images in this README with real agent sessions. |
-| `npm run demo` | Starts a browser demo of an agent session at http://localhost:5199. |
 
 To release, run `npm version <x.y.z>` and push the tag with `git push --follow-tags`. The release workflow checks the code, builds the plugin and creates a draft GitHub release. Publish the draft to make the version available.
 
-The plugin is built on a small TypeScript library in `src/` that starts and drives Claude Code and Codex sessions. Its design notes are in [docs/design.md](docs/design.md).
+The plugin is built on a small TypeScript library in `src/` that starts and drives Claude Code and Codex sessions. Other apps can use it as a package; [duet-demo](https://github.com/nathanaday/duet-demo) is a browser app built on it. The design notes are in [docs/design.md](docs/design.md).
 
 ## License
 
