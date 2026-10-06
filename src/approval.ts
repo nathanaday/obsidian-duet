@@ -11,12 +11,20 @@ import type { Harness } from './session.ts';
  */
 export type ApprovalSetting = 'ask' | 'accept-edits' | 'plan' | 'sandbox';
 
+export function claudePermissionMode(setting: ApprovalSetting): 'acceptEdits' | 'plan' | 'default' {
+  return setting === 'accept-edits' ? 'acceptEdits' : setting === 'plan' ? 'plan' : 'default';
+}
+
+export function codexApprovalPolicy(setting: ApprovalSetting): 'on-request' | 'untrusted' {
+  return setting === 'sandbox' ? 'on-request' : 'untrusted';
+}
+
 export function approvalOptions(
   harness: Harness,
   setting: ApprovalSetting,
 ): Pick<ClaudeSessionOptions, 'permissionMode'> | Pick<CodexSessionOptions, 'approvalPolicy' | 'sandbox'> {
   if (harness === 'claude') {
-    return { permissionMode: setting === 'accept-edits' ? 'acceptEdits' : setting === 'plan' ? 'plan' : 'default' };
+    return { permissionMode: claudePermissionMode(setting) };
   }
-  return { approvalPolicy: setting === 'sandbox' ? 'on-request' : 'untrusted', sandbox: 'workspace-write' };
+  return { approvalPolicy: codexApprovalPolicy(setting), sandbox: 'workspace-write' };
 }

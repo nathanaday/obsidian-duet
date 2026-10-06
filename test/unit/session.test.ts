@@ -18,6 +18,16 @@ class EchoSession extends BaseSession {
   async close(): Promise<void> {
     this.markClosed();
   }
+
+  async models() {
+    return [];
+  }
+
+  async commands() {
+    return [];
+  }
+
+  async configure() {}
 }
 
 describe('BaseSession', () => {
@@ -32,7 +42,7 @@ describe('BaseSession', () => {
 
   it('fails the turn when the adapter throws, then runs the next one', async () => {
     const session = new EchoSession();
-    expect(await session.send('throw')).toEqual({ status: 'failed', text: '', error: 'adapter bug' });
+    expect(await session.send('throw')).toMatchObject({ status: 'failed', text: '', error: 'adapter bug' });
     expect((await session.send('next')).text).toBe('next');
   });
 

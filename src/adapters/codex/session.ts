@@ -1,21 +1,33 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { z } from 'zod';
+import { lineDiff } from '../../diff.ts';
 import { findExecutable, harnessEnvironment, pathDisplay } from '../../environment.ts';
 import {
+  type AgentTool,
   askPermission,
   BaseSession,
+  type CommandOption,
+  type ModelOption,
   type PermissionDecision,
+  runTool,
   type SessionOptions,
+  type SessionSettings,
 } from '../../session.ts';
+import { codexApprovalPolicy } from '../../approval.ts';
 import type {
   AgentMessageDelta,
   ApprovalDecision,
   ApprovalPolicy,
   CommandApprovalParams,
+  DynamicToolCallParams,
   ErrorNotification,
   FileChangeApprovalParams,
   ItemNotification,
+  Model,
   PermissionsApprovalParams,
+  ReasoningDelta,
   SandboxMode,
+  Skill,
   ThreadItem,
   ThreadStartResponse,
   TurnNotification,
@@ -67,6 +79,9 @@ export class CodexSession extends BaseSession {
   private finalMessage = '';
   private lastError: string | undefined;
   private readonly items = new Map<string, ThreadItem>();
+  private readonly appTools = new Map<string, AgentTool>();
+  private settings: SessionSettings = {};
+  private skills: Promise<Skill[]> | undefined;
   private stderr = '';
   private readonly exited: Promise<void>;
   private readonly showPath: (file: string) => string;
@@ -77,6 +92,7 @@ export class CodexSession extends BaseSession {
   ) {
     super();
     this.showPath = pathDisplay(options.cwd);
+    for (const appTool of options.tools?.tools ?? []) this.appTools.set(appTool.name, appTool);
     child.stderr!.setEncoding('utf8').on('data', (chunk: string) => {
       this.stderr = (this.stderr + chunk).slice(-STDERR_LIMIT);
     });
@@ -102,26 +118,84 @@ export class CodexSession extends BaseSession {
 
   async start(): Promise<void> {
     const name = this.options.clientName;
+    const { tools } = this.options;
     await this.rpc.request('initialize', {
       clientInfo: { name, title: name, version: CLIENT_VERSION },
-      capabilities: null,
+      // Dynamic tools are part of the experimental API.
+      capabilities: tools ? { experimentalApi: true, requestAttestation: false } : null,
     });
     this.rpc.notify('initialized');
+    const readOnly = this.options.access === 'read-only';
     const settings = {
       cwd: this.options.cwd,
       model: this.options.model ?? null,
-      approvalPolicy: this.options.approvalPolicy ?? 'on-request',
-      sandbox: this.options.sandbox ?? 'workspace-write',
+      approvalPolicy: readOnly ? 'never' : (this.options.approvalPolicy ?? 'on-request'),
+      sandbox: readOnly ? 'read-only' : (this.options.sandbox ?? 'workspace-write'),
       developerInstructions: this.options.instructions ?? null,
     };
+    const dynamicTools = tools && [
+      {
+        type: 'namespace',
+        name: tools.name,
+        description: tools.description,
+        tools: tools.tools.map((appTool) => ({
+          type: 'function',
+          name: appTool.name,
+          description: appTool.description,
+          inputSchema: z.toJSONSchema(z.object(appTool.input)),
+        })),
+      },
+    ];
     const response = this.options.resume
       ? await this.rpc.request<ThreadStartResponse>('thread/resume', {
           threadId: this.options.resume,
           excludeTurns: true,
           ...settings,
         })
-      : await this.rpc.request<ThreadStartResponse>('thread/start', settings);
+      : await this.rpc.request<ThreadStartResponse>('thread/start', { ...settings, ...(dynamicTools && { dynamicTools }) });
     this.threadId = response.thread.id;
+    if (this.options.effort) this.settings.effort = this.options.effort;
+  }
+
+  async models(): Promise<ModelOption[]> {
+    const { data } = await this.rpc.request<{ data: Model[] }>('model/list', {});
+    return data
+      .filter((model) => !model.hidden)
+      .map((model) => ({
+        id: model.model,
+        name: model.displayName,
+        description: model.description,
+        efforts: model.supportedReasoningEfforts.map((option) => option.reasoningEffort),
+        defaultEffort: model.defaultReasoningEffort,
+        isDefault: model.isDefault,
+      }));
+  }
+
+  /** Codex skills. `send('/name request')` invokes the skill `name`. */
+  async commands(): Promise<CommandOption[]> {
+    const skills = await this.loadSkills();
+    return skills.map((skill) => ({ name: skill.name, description: skill.shortDescription ?? skill.description }));
+  }
+
+  async configure(settings: SessionSettings): Promise<void> {
+    this.settings = { ...this.settings, ...settings };
+  }
+
+  private loadSkills(): Promise<Skill[]> {
+    this.skills ??= this.rpc
+      .request<{ data: { skills: Skill[] }[] }>('skills/list', { cwds: [this.options.cwd] })
+      .then(({ data }) => data.flatMap((entry) => entry.skills).filter((skill) => skill.enabled))
+      .catch(() => []);
+    return this.skills;
+  }
+
+  private async input(text: string): Promise<unknown[]> {
+    const message = { type: 'text', text, text_elements: [] };
+    const command = text.match(/^\/([\w:-]+)\s*([\s\S]*)$/);
+    if (!command) return [message];
+    const skill = (await this.loadSkills()).find((candidate) => candidate.name === command[1]);
+    if (!skill) return [message];
+    return [{ type: 'skill', name: skill.name, path: skill.path }, { ...message, text: command[2] || `Use the ${skill.name} skill.` }];
   }
 
   protected async startTurn(text: string): Promise<void> {
@@ -130,9 +204,13 @@ export class CodexSession extends BaseSession {
     this.finalMessage = '';
     this.lastError = undefined;
     this.items.clear();
+    const { model, effort, approval } = this.settings;
     const response = await this.rpc.request<{ turn: { id: string } }>('turn/start', {
       threadId: this.threadId,
-      input: [{ type: 'text', text, text_elements: [] }],
+      input: await this.input(text),
+      ...(model !== undefined && { model }),
+      ...(effort !== undefined && { effort }),
+      ...(approval && this.options.access !== 'read-only' && { approvalPolicy: codexApprovalPolicy(approval) }),
     });
     this.turnId ??= response.turn.id;
   }
@@ -175,6 +253,12 @@ export class CodexSession extends BaseSession {
       case 'item/agentMessage/delta':
         this.emit({ type: 'text-delta', text: (params as AgentMessageDelta).delta });
         break;
+      case 'item/reasoning/summaryTextDelta':
+        this.emit({ type: 'thinking-delta', text: (params as ReasoningDelta).delta });
+        break;
+      case 'item/reasoning/summaryPartAdded':
+        if ((params as ReasoningDelta).summaryIndex > 0) this.emit({ type: 'thinking-delta', text: '\n\n' });
+        break;
       case 'item/started':
         this.itemStarted((params as ItemNotification).item);
         break;
@@ -200,7 +284,20 @@ export class CodexSession extends BaseSession {
   private itemStarted(item: ThreadItem): void {
     this.items.set(item.id, item);
     const title = this.describeItem(item);
-    if (title) this.emit({ type: 'tool-start', id: item.id, tool: item.type, title });
+    if (!title) return;
+    const tool = item.type === 'dynamicToolCall' && 'tool' in item ? `${item.namespace}.${item.tool}` : item.type;
+    this.emit({ type: 'tool-start', id: item.id, tool, title, ...this.itemDetail(item) });
+  }
+
+  private itemDetail(item: ThreadItem): { detail?: string; paths?: string[] } {
+    if (item.type === 'commandExecution' && 'command' in item) return { detail: unwrapShell(item.command) };
+    if (item.type === 'fileChange' && 'changes' in item) {
+      return {
+        detail: item.changes.map((change) => change.diff).join('\n'),
+        paths: item.changes.map((change) => this.showPath(change.path)),
+      };
+    }
+    return {};
   }
 
   private itemCompleted(item: ThreadItem): void {
@@ -208,6 +305,11 @@ export class CodexSession extends BaseSession {
     if (item.type === 'agentMessage' && 'text' in item) {
       this.finalMessage = item.text;
       this.emit({ type: 'message', text: item.text });
+      return;
+    }
+    if (item.type === 'reasoning' && 'summary' in item) {
+      const text = item.summary.join('\n\n').trim();
+      if (text) this.emit({ type: 'thinking', text });
       return;
     }
     if (!this.describeItem(item)) return;
@@ -219,6 +321,9 @@ export class CodexSession extends BaseSession {
       output = item.aggregatedOutput ?? undefined;
     } else if (item.type === 'mcpToolCall' && 'error' in item) {
       output = item.error?.message;
+    } else if (item.type === 'dynamicToolCall' && 'contentItems' in item) {
+      ok = item.success ?? ok;
+      output = item.contentItems?.map((content) => content.text ?? '').join('');
     }
     this.emit({ type: 'tool-end', id: item.id, ok, output });
   }
@@ -265,6 +370,14 @@ export class CodexSession extends BaseSession {
           scope: decision === 'allow-session' ? 'session' : 'turn',
         };
       }
+      case 'item/tool/call': {
+        const call = params as DynamicToolCallParams;
+        const appTool = call.namespace === this.options.tools?.name ? this.appTools.get(call.tool) : undefined;
+        const { text, isError } = appTool
+          ? await runTool(appTool, call.arguments, signal)
+          : { text: `Unknown tool ${call.namespace}.${call.tool}`, isError: true };
+        return { contentItems: [{ type: 'inputText', text }], success: !isError };
+      }
       case 'mcpServer/elicitation/request':
         return { action: 'decline', content: null, _meta: null };
       default:
@@ -284,6 +397,11 @@ export class CodexSession extends BaseSession {
         return 'server' in item ? `${item.server}.${item.tool}` : 'MCP tool';
       case 'webSearch':
         return 'query' in item && item.query ? `Search: ${item.query}` : 'Web search';
+      case 'dynamicToolCall': {
+        if (!('tool' in item)) return 'Tool';
+        const appTool = item.namespace === this.options.tools?.name ? this.appTools.get(item.tool) : undefined;
+        return appTool?.title?.(item.arguments as never) ?? item.tool;
+      }
       default:
         return undefined;
     }

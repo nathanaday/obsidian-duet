@@ -49,6 +49,17 @@ export type ThreadItem =
       error: { message: string } | null;
     }
   | { type: 'webSearch'; id: string; query?: string }
+  | { type: 'reasoning'; id: string; summary: string[]; content: string[] }
+  | {
+      type: 'dynamicToolCall';
+      id: string;
+      namespace: string | null;
+      tool: string;
+      arguments: unknown;
+      status: 'inProgress' | 'completed' | 'failed';
+      contentItems: { type: string; text?: string }[] | null;
+      success: boolean | null;
+    }
   | { type: string; id: string };
 
 export interface ItemNotification {
@@ -62,6 +73,42 @@ export interface AgentMessageDelta {
   turnId: string;
   itemId: string;
   delta: string;
+}
+
+export interface ReasoningDelta {
+  threadId: string;
+  turnId: string;
+  itemId: string;
+  delta: string;
+  summaryIndex: number;
+}
+
+export interface DynamicToolCallParams {
+  threadId: string;
+  turnId: string;
+  callId: string;
+  namespace: string | null;
+  tool: string;
+  arguments: unknown;
+}
+
+export interface Model {
+  id: string;
+  model: string;
+  displayName: string;
+  description: string;
+  hidden: boolean;
+  supportedReasoningEfforts: { reasoningEffort: string; description: string }[];
+  defaultReasoningEffort: string;
+  isDefault: boolean;
+}
+
+export interface Skill {
+  name: string;
+  description: string;
+  shortDescription?: string;
+  path: string;
+  enabled: boolean;
 }
 
 export interface TurnNotification {

@@ -2,7 +2,8 @@ import { chmodSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startCodexSession, unwrapShell } from '../../src/adapters/codex/session.ts';
-import type { AgentEvent, AgentSession, PermissionDecision, PermissionRequest } from '../../src/index.ts';
+import { z } from 'zod';
+import { type AgentEvent, type AgentSession, defineTool, type PermissionDecision, type PermissionRequest } from '../../src/index.ts';
 
 const FAKE = fileURLToPath(new URL('../fixtures/fake-codex.mjs', import.meta.url));
 chmodSync(FAKE, 0o755);
@@ -35,7 +36,8 @@ describe('codex adapter', () => {
     const { session, events } = await start();
     expect(session.id).toBe('thread-1');
     const result = await session.send('hello');
-    expect(result).toEqual({ status: 'completed', text: 'Hello there' });
+    expect(result).toMatchObject({ status: 'completed', text: 'Hello there' });
+    expect(result.usage?.durationMs).toBeGreaterThanOrEqual(0);
     const deltas = events.filter((event) => event.type === 'text-delta').map((event) => event.text);
     expect(deltas.join('')).toBe('Hello there');
     expect(events[0]).toEqual({ type: 'turn-start', prompt: 'hello' });
@@ -51,7 +53,7 @@ describe('codex adapter', () => {
     const result = await session.send('command');
     expect(JSON.parse(result.text)).toEqual({ decision: expected });
     expect(requests[0]).toMatchObject({ tool: 'command', title: 'Run touch x' });
-    expect(events).toContainEqual({ type: 'tool-start', id: 'cmd-1', tool: 'commandExecution', title: 'touch x' });
+    expect(events).toContainEqual({ type: 'tool-start', id: 'cmd-1', tool: 'commandExecution', title: 'touch x', detail: 'touch x' });
     expect(events).toContainEqual({ type: 'tool-end', id: 'cmd-1', ok: true, output: 'done' });
   });
 
@@ -91,7 +93,7 @@ describe('codex adapter', () => {
 
   it('reports a failed turn with the last error', async () => {
     const { session } = await start();
-    expect(await session.send('fail')).toEqual({ status: 'failed', text: '', error: 'model overloaded' });
+    expect(await session.send('fail')).toMatchObject({ status: 'failed', text: '', error: 'model overloaded' });
   });
 
   it('interrupts a running turn and accepts the next message', async () => {
@@ -147,6 +149,84 @@ describe('codex adapter', () => {
     expect(unwrapShell(`/bin/zsh -lc 'ls -a'`)).toBe('ls -a');
     expect(unwrapShell(`/bin/bash -c "pwd && git status"`)).toBe('pwd && git status');
     expect(unwrapShell('ls -a')).toBe('ls -a');
+  });
+
+  it('runs app tools that the agent calls', async () => {
+    const calls: unknown[] = [];
+    const tools = {
+      name: 'note',
+      description: 'Edit the note.',
+      tools: [
+        defineTool({
+          name: 'append',
+          description: 'Appends text.',
+          input: { text: z.string() },
+          title: (input) => `Append ${input.text}`,
+          run: async (input) => {
+            calls.push(input);
+            return `appended ${input.text}`;
+          },
+        }),
+      ],
+    };
+    const events: AgentEvent[] = [];
+    session = await startCodexSession({ cwd: process.cwd(), clientName: 'test', executablePath: FAKE, tools });
+    session.on((event) => events.push(event));
+    const result = await session.send('tool');
+    expect(calls).toEqual([{ text: 'hi' }]);
+    expect(JSON.parse(result.text)).toEqual({ contentItems: [{ type: 'inputText', text: 'appended hi' }], success: true });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'tool-start', tool: 'note.append', title: 'Append hi' }));
+    const setup = JSON.parse((await session.send('setup')).text);
+    expect(setup.capabilities).toEqual({ experimentalApi: true, requestAttestation: false });
+    expect(setup.dynamicTools[0]).toMatchObject({ type: 'namespace', name: 'note', tools: [{ name: 'append' }] });
+    expect(setup.dynamicTools[0].tools[0].inputSchema.properties.text).toEqual({ type: 'string' });
+  });
+
+  it('reports an error result when an app tool throws', async () => {
+    const tools = {
+      name: 'note',
+      description: 'Edit the note.',
+      tools: [defineTool({ name: 'append', description: '', input: { text: z.string() }, run: async () => { throw new Error('no note'); } })],
+    };
+    session = await startCodexSession({ cwd: process.cwd(), clientName: 'test', executablePath: FAKE, tools });
+    expect(JSON.parse((await session.send('tool')).text)).toEqual({ contentItems: [{ type: 'inputText', text: 'no note' }], success: false });
+  });
+
+  it('runs read-only without approvals', async () => {
+    session = await startCodexSession({ cwd: process.cwd(), clientName: 'test', executablePath: FAKE, access: 'read-only' });
+    const setup = JSON.parse((await session.send('setup')).text);
+    expect(setup).toMatchObject({ sandbox: 'read-only', approvalPolicy: 'never', capabilities: null });
+  });
+
+  it('streams reasoning summaries as thinking', async () => {
+    const { session, events } = await start();
+    await session.send('reasoning');
+    const deltas = events.filter((event) => event.type === 'thinking-delta').map((event) => event.text);
+    expect(deltas.join('')).toBe('Plan the reply\n\nCheck the note');
+    expect(events).toContainEqual({ type: 'thinking', text: 'Plan the reply\n\nCheck the note' });
+  });
+
+  it('lists models with their effort levels', async () => {
+    const { session } = await start();
+    expect(await session.models()).toEqual([
+      { id: 'gpt-fast', name: 'Fast', description: 'Quick', efforts: ['low', 'high'], defaultEffort: 'low', isDefault: true },
+    ]);
+  });
+
+  it('sends the configured model and effort with the next turn', async () => {
+    const { session } = await start();
+    await session.configure({ model: 'gpt-fast', effort: 'high' });
+    expect(JSON.parse((await session.send('turn-settings')).text)).toEqual({ model: 'gpt-fast', effort: 'high' });
+  });
+
+  it('lists skills as commands and invokes one with a slash', async () => {
+    const { session } = await start();
+    expect(await session.commands()).toEqual([{ name: 'summarize', description: 'Summarize a note' }]);
+    const input = JSON.parse((await session.send('/summarize Ideas.md')).text);
+    expect(input).toEqual([
+      { type: 'skill', name: 'summarize', path: '/skills/summarize/SKILL.md' },
+      { type: 'text', text: 'Ideas.md', text_elements: [] },
+    ]);
   });
 
   it('closes cleanly while idle', async () => {

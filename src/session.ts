@@ -1,3 +1,6 @@
+import type { z } from 'zod';
+import type { ApprovalSetting } from './approval.ts';
+
 export type Harness = 'claude' | 'codex';
 
 export interface SessionOptions {
@@ -10,12 +13,79 @@ export interface SessionOptions {
   /** Variables added to the inherited environment, for example `CLAUDE_CONFIG_DIR`. */
   env?: Record<string, string>;
   model?: string;
+  /** Reasoning effort, for example `low`, `medium` or `high`. `AgentSession.models` lists the levels of each model. */
+  effort?: string;
   /** Instructions added to the harness's own system prompt. They apply to every turn of a new session. */
   instructions?: string;
   /** Session id from an earlier `AgentSession.id`. The agent continues that conversation. */
   resume?: string;
   /** Called when the agent wants to use a tool that needs approval. With no handler, the session denies the request. */
   onPermission?: PermissionHandler;
+  /** Tools that run inside the app. The agent calls them like its built-in tools, without approval. */
+  tools?: ToolSet;
+  /**
+   * `read-only`: the agent can read files and search, but it cannot change files or run commands
+   * that change them. It can still change things through `tools`. Default: `workspace`.
+   */
+  access?: 'workspace' | 'read-only';
+}
+
+export interface ToolSet {
+  /** Namespace of the tools, for example `note`. Letters, digits and underscores. */
+  name: string;
+  description: string;
+  tools: AgentTool[];
+}
+
+export interface AgentTool<Shape extends z.ZodRawShape = z.ZodRawShape> {
+  /** Letters, digits and underscores. */
+  name: string;
+  description: string;
+  input: Shape;
+  /** Short one-line summary for `tool-start` events. */
+  title?(input: z.infer<z.ZodObject<Shape>>): string;
+  run(input: z.infer<z.ZodObject<Shape>>, context: { signal: AbortSignal }): Promise<ToolOutput>;
+}
+
+export type ToolOutput = string | { text: string; isError?: boolean };
+
+/** Returns the tool unchanged. It exists so TypeScript infers the input type of `run` from `input`. */
+export function defineTool<Shape extends z.ZodRawShape>(tool: AgentTool<Shape>): AgentTool<Shape> {
+  return tool;
+}
+
+/** Runs an app tool. A thrown error becomes an error result, so the agent can react to it. */
+export async function runTool(tool: AgentTool, input: unknown, signal: AbortSignal): Promise<{ text: string; isError: boolean }> {
+  try {
+    const output = await tool.run(input as never, { signal });
+    return typeof output === 'string' ? { text: output, isError: false } : { text: output.text, isError: output.isError ?? false };
+  } catch (error) {
+    return { text: error instanceof Error ? error.message : String(error), isError: true };
+  }
+}
+
+export interface SessionSettings {
+  model?: string | null;
+  effort?: string | null;
+  approval?: ApprovalSetting;
+}
+
+export interface ModelOption {
+  /** Value for `SessionOptions.model` and `AgentSession.configure`. */
+  id: string;
+  name: string;
+  description: string;
+  /** Effort levels that the model accepts. Empty when the model has no effort setting. */
+  efforts: string[];
+  defaultEffort?: string;
+  isDefault: boolean;
+}
+
+export interface CommandOption {
+  /** Name without the leading slash. */
+  name: string;
+  description: string;
+  argumentHint?: string;
 }
 
 export interface PermissionRequest {
@@ -46,13 +116,34 @@ export interface TurnResult {
   /** The agent's final message for the turn. Empty when the turn did not finish. */
   text: string;
   error?: string;
+  usage?: TurnUsage;
+}
+
+export interface TurnUsage {
+  durationMs: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
 }
 
 export type AgentEvent =
   | { type: 'turn-start'; prompt: string }
   | { type: 'text-delta'; text: string }
   | { type: 'message'; text: string }
-  | { type: 'tool-start'; id: string; tool: string; /** Short one-line summary. */ title: string }
+  /** Summary of the agent's reasoning, when the harness and model provide one. */
+  | { type: 'thinking-delta'; text: string }
+  | { type: 'thinking'; text: string }
+  | {
+      type: 'tool-start';
+      id: string;
+      tool: string;
+      /** Short one-line summary. */
+      title: string;
+      /** A command, or a diff whose lines start with ' ', '-' or '+'. */
+      detail?: string;
+      /** Files that the tool reads or changes, relative to `cwd` when inside it. */
+      paths?: string[];
+    }
   | { type: 'tool-end'; id: string; ok: boolean; output?: string }
   | { type: 'turn-end'; result: TurnResult }
   | { type: 'closed'; error?: string };
@@ -74,6 +165,12 @@ export interface AgentSession {
   /** Stops the current turn. The turn resolves with status `interrupted`. */
   interrupt(): Promise<void>;
   close(): Promise<void>;
+  /** The models that the harness offers to this user. */
+  models(): Promise<ModelOption[]>;
+  /** Slash commands that `send` accepts, for example `/review`. */
+  commands(): Promise<CommandOption[]>;
+  /** Changes settings for the next turns. Omitted fields stay as they are; `null` returns to the default. */
+  configure(settings: SessionSettings): Promise<void>;
 }
 
 export class SessionClosedError extends Error {
@@ -129,6 +226,9 @@ export abstract class BaseSession implements AgentSession {
   }
 
   abstract close(): Promise<void>;
+  abstract models(): Promise<ModelOption[]>;
+  abstract commands(): Promise<CommandOption[]>;
+  abstract configure(settings: SessionSettings): Promise<void>;
 
   /** Sends the message to the harness. The adapter calls `turn.finish` when the harness ends the turn. */
   protected abstract startTurn(text: string, turn: ActiveTurn): Promise<void>;
@@ -164,12 +264,14 @@ export abstract class BaseSession implements AgentSession {
     const message = this.queue.shift();
     if (!message) return;
     const turn = new ActiveTurn();
+    const started = Date.now();
     this.active = turn;
     this.emit({ type: 'turn-start', prompt: message.text });
     this.startTurn(message.text, turn).catch((error: unknown) =>
       turn.finish({ status: 'failed', text: '', error: error instanceof Error ? error.message : String(error) }),
     );
-    void turn.result.then((result) => {
+    void turn.result.then((finished) => {
+      const result: TurnResult = { ...finished, usage: { ...finished.usage, durationMs: Date.now() - started } };
       this.active = undefined;
       this.emit({ type: 'turn-end', result });
       message.resolve(result);

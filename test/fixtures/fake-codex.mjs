@@ -7,6 +7,8 @@ let nextId = 1000;
 let turnCount = 0;
 let activeTurn;
 let instructions = null;
+let setup = {};
+let lastTurn = {};
 const waiting = new Map();
 
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\n');
@@ -72,12 +74,41 @@ async function runTurn(prompt) {
     case 'instructions':
       reply(String(instructions));
       return complete();
+    case 'setup':
+      reply(JSON.stringify(setup));
+      return complete();
+    case 'turn-settings':
+      reply(JSON.stringify({ model: lastTurn.model, effort: lastTurn.effort }));
+      return complete();
+    case 'tool': {
+      const item = { type: 'dynamicToolCall', id: 'dt-1', namespace: 'note', tool: 'append', arguments: { text: 'hi' }, status: 'inProgress', contentItems: null, success: null };
+      notify('item/started', { turnId: activeTurn, item });
+      const response = await request('item/tool/call', { callId: 'dt-1', namespace: 'note', tool: 'append', arguments: { text: 'hi' } });
+      notify('item/completed', { turnId: activeTurn, item: { ...item, status: 'completed', ...response.result } });
+      reply(JSON.stringify(response.result));
+      return complete();
+    }
+    case 'reasoning': {
+      const item = { type: 'reasoning', id: 'r-1', summary: [], content: [] };
+      notify('item/started', { turnId: activeTurn, item });
+      notify('item/reasoning/summaryPartAdded', { turnId: activeTurn, itemId: 'r-1', summaryIndex: 0 });
+      notify('item/reasoning/summaryTextDelta', { turnId: activeTurn, itemId: 'r-1', delta: 'Plan the reply', summaryIndex: 0 });
+      notify('item/reasoning/summaryPartAdded', { turnId: activeTurn, itemId: 'r-1', summaryIndex: 1 });
+      notify('item/reasoning/summaryTextDelta', { turnId: activeTurn, itemId: 'r-1', delta: 'Check the note', summaryIndex: 1 });
+      notify('item/completed', { turnId: activeTurn, item: { ...item, summary: ['Plan the reply', 'Check the note'] } });
+      reply('ok');
+      return complete();
+    }
     case 'wait':
       return; // Ends on turn/interrupt.
     case 'crash':
       process.stderr.write('fatal: something broke\n');
       process.exit(3);
     default:
+      if (prompt.startsWith('Ideas.md')) {
+        reply(JSON.stringify(lastTurn.input));
+        return complete();
+      }
       reply(`echo: ${prompt}`);
       return complete();
   }
@@ -93,11 +124,13 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   const { id, method, params } = message;
   switch (method) {
     case 'initialize':
+      setup.capabilities = params.capabilities;
       return send({ id, result: { userAgent: `fake/${params.clientInfo.name}`, codexHome: '/tmp', platformFamily: 'unix', platformOs: 'macos' } });
     case 'initialized':
       return;
     case 'thread/start':
       instructions = params.developerInstructions;
+      Object.assign(setup, { sandbox: params.sandbox, approvalPolicy: params.approvalPolicy, dynamicTools: params.dynamicTools });
       return send({ id, result: { thread: { id: THREAD }, model: 'fake', cwd: params.cwd } });
     case 'thread/resume':
       if (params.threadId !== THREAD) {
@@ -107,14 +140,42 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     case 'turn/start': {
       // Like the real server, answer before the turn is active and announce it a moment later.
       const turnId = `turn-${++turnCount}`;
+      lastTurn = params;
       send({ id, result: { turn: { id: turnId, items: [], status: 'inProgress', error: null } } });
       setTimeout(() => {
         activeTurn = turnId;
         notify('turn/started', { turn: { id: turnId } });
-        void runTurn(params.input[0].text);
+        void runTurn(params.input.find((input) => input.type === 'text').text);
       }, 5);
       return;
     }
+    case 'model/list':
+      return send({
+        id,
+        result: {
+          data: [
+            { id: 'm1', model: 'gpt-fast', displayName: 'Fast', description: 'Quick', hidden: false, supportedReasoningEfforts: [{ reasoningEffort: 'low', description: '' }, { reasoningEffort: 'high', description: '' }], defaultReasoningEffort: 'low', isDefault: true },
+            { id: 'm2', model: 'gpt-hidden', displayName: 'Hidden', description: '', hidden: true, supportedReasoningEfforts: [], defaultReasoningEffort: 'low', isDefault: false },
+          ],
+          nextCursor: null,
+        },
+      });
+    case 'skills/list':
+      return send({
+        id,
+        result: {
+          data: [
+            {
+              cwd: params.cwds[0],
+              skills: [
+                { name: 'summarize', description: 'Long text', shortDescription: 'Summarize a note', path: '/skills/summarize/SKILL.md', enabled: true },
+                { name: 'off', description: 'Disabled', path: '/skills/off/SKILL.md', enabled: false },
+              ],
+              errors: [],
+            },
+          ],
+        },
+      });
     case 'turn/interrupt':
       if (activeTurn !== params.turnId) {
         return send({ id, error: { code: -32600, message: 'no active turn to interrupt' } });

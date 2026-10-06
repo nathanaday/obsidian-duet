@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import {
   type CanUseTool,
+  createSdkMcpServer,
+  type EffortLevel,
+  type McpServerConfig,
   type Options,
   type PermissionMode,
   type PermissionResult,
@@ -8,11 +11,23 @@ import {
   query,
   type SDKMessage,
   type SDKUserMessage,
+  tool,
 } from '@anthropic-ai/claude-agent-sdk/core';
+import { claudePermissionMode } from '../approval.ts';
 import { AsyncQueue } from '../async-queue.ts';
 import { lineDiff } from '../diff.ts';
 import { findExecutable, harnessEnvironment, pathDisplay } from '../environment.ts';
-import { askPermission, BaseSession, type SessionOptions } from '../session.ts';
+import {
+  type AgentTool,
+  askPermission,
+  BaseSession,
+  type CommandOption,
+  type ModelOption,
+  runTool,
+  type SessionOptions,
+  type SessionSettings,
+  type ToolSet,
+} from '../session.ts';
 
 export interface ClaudeSessionOptions extends SessionOptions {
   /** Default: `default`, which sends every tool that needs approval to `onPermission`. */
@@ -22,6 +37,9 @@ export interface ClaudeSessionOptions extends SessionOptions {
 }
 
 const STDERR_LIMIT = 4096;
+/** Built-in tools that only read. `access: 'read-only'` limits the session to these. */
+const READ_ONLY_TOOLS = ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch'];
+const FILE_TOOLS = new Set(['Read', 'Edit', 'Write', 'NotebookEdit']);
 
 export async function startClaudeSession(options: ClaudeSessionOptions): Promise<ClaudeSession> {
   const env = await harnessEnvironment({
@@ -49,6 +67,7 @@ export class ClaudeSession extends BaseSession {
   private turnStarted = false;
   private stderr = '';
   private readonly showPath: (file: string) => string;
+  private readonly appTools = new Map<string, AgentTool>();
 
   constructor(
     private readonly options: ClaudeSessionOptions,
@@ -58,6 +77,9 @@ export class ClaudeSession extends BaseSession {
     super();
     this.id = options.resume ?? randomUUID();
     this.showPath = pathDisplay(options.cwd);
+    const { tools } = options;
+    for (const appTool of tools?.tools ?? []) this.appTools.set(`mcp__${tools!.name}__${appTool.name}`, appTool);
+    const readOnly = options.access === 'read-only';
     this.query = query({
       prompt: this.input,
       options: {
@@ -65,7 +87,11 @@ export class ClaudeSession extends BaseSession {
         env,
         pathToClaudeCodeExecutable: executable,
         model: options.model,
+        ...(options.effort && { effort: options.effort as EffortLevel }),
+        settings: { showThinkingSummaries: true },
         permissionMode: options.permissionMode ?? 'default',
+        ...(readOnly && { tools: READ_ONLY_TOOLS, strictMcpConfig: true }),
+        ...(tools && { mcpServers: { [tools.name]: this.toolServer(tools) } }),
         ...(options.instructions && {
           systemPrompt: { type: 'preset', preset: 'claude_code', append: options.instructions },
         }),
@@ -76,7 +102,25 @@ export class ClaudeSession extends BaseSession {
         },
         ...(options.resume ? { resume: options.resume } : { sessionId: this.id }),
         ...options.sdkOptions,
+        ...(tools && options.sdkOptions?.mcpServers && {
+          mcpServers: { ...options.sdkOptions.mcpServers, [tools.name]: this.toolServer(tools) },
+        }),
       },
+    });
+  }
+
+  private toolServer(tools: ToolSet): McpServerConfig {
+    return createSdkMcpServer({
+      name: tools.name,
+      instructions: tools.description,
+      alwaysLoad: true,
+      tools: tools.tools.map((appTool) =>
+        tool(appTool.name, appTool.description, appTool.input, async (input) => {
+          const signal = this.currentTurn?.controller.signal ?? AbortSignal.abort();
+          const { text, isError } = await runTool(appTool, input, signal);
+          return { content: [{ type: 'text', text }], isError };
+        }),
+      ),
     });
   }
 
@@ -110,6 +154,28 @@ export class ClaudeSession extends BaseSession {
     this.query.close();
   }
 
+  async models(): Promise<ModelOption[]> {
+    const models = await this.query.supportedModels();
+    return models.map((model, index) => ({
+      id: model.value,
+      name: model.displayName,
+      description: model.description,
+      efforts: model.supportsEffort ? (model.supportedEffortLevels ?? []) : [],
+      isDefault: index === 0,
+    }));
+  }
+
+  async commands(): Promise<CommandOption[]> {
+    const commands = await this.query.supportedCommands();
+    return commands.map(({ name, description, argumentHint }) => ({ name, description, ...(argumentHint && { argumentHint }) }));
+  }
+
+  async configure(settings: SessionSettings): Promise<void> {
+    if (settings.model !== undefined) await this.query.setModel(settings.model ?? undefined);
+    if (settings.effort !== undefined) await this.query.applyFlagSettings({ effortLevel: (settings.effort as EffortLevel) ?? null });
+    if (settings.approval) await this.query.setPermissionMode(claudePermissionMode(settings.approval));
+  }
+
   private async pump(): Promise<void> {
     let error: string | undefined;
     try {
@@ -135,9 +201,9 @@ export class ClaudeSession extends BaseSession {
     switch (message.type) {
       case 'stream_event': {
         const { event } = message;
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          this.emit({ type: 'text-delta', text: event.delta.text });
-        }
+        if (event.type !== 'content_block_delta') break;
+        if (event.delta.type === 'text_delta') this.emit({ type: 'text-delta', text: event.delta.text });
+        else if (event.delta.type === 'thinking_delta') this.emit({ type: 'thinking-delta', text: event.delta.thinking });
         break;
       }
       case 'assistant':
@@ -145,8 +211,10 @@ export class ClaudeSession extends BaseSession {
           if (block.type === 'text') {
             this.finalMessage = block.text;
             this.emit({ type: 'message', text: block.text });
+          } else if (block.type === 'thinking') {
+            if (block.thinking) this.emit({ type: 'thinking', text: block.thinking });
           } else if (block.type === 'tool_use') {
-            this.emit({ type: 'tool-start', id: block.id, tool: block.name, title: this.describeTool(block.name, block.input) });
+            this.emit({ type: 'tool-start', id: block.id, ...this.toolSummary(block.name, block.input as Record<string, unknown>) });
           }
         }
         break;
@@ -176,7 +244,16 @@ export class ClaudeSession extends BaseSession {
     if (turn.interruptRequested) {
       turn.finish({ status: 'interrupted', text: this.finalMessage });
     } else if (message.subtype === 'success' && !message.is_error) {
-      turn.finish({ status: 'completed', text: message.result });
+      const { input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens } = message.usage;
+      turn.finish({
+        status: 'completed',
+        text: message.result,
+        usage: {
+          durationMs: message.duration_ms,
+          inputTokens: input_tokens + (cache_read_input_tokens ?? 0) + (cache_creation_input_tokens ?? 0),
+          outputTokens: output_tokens,
+        },
+      });
     } else {
       const error = message.subtype === 'success' ? message.result : message.errors.join('\n') || message.subtype;
       turn.finish({ status: 'failed', text: this.finalMessage, error });
@@ -184,6 +261,7 @@ export class ClaudeSession extends BaseSession {
   }
 
   private readonly canUseTool: CanUseTool = async (toolName, input, { signal, suggestions }) => {
+    if (this.appTools.has(toolName)) return { behavior: 'allow', updatedInput: input };
     const decision = await askPermission(this.options.onPermission, {
       tool: toolName,
       title: this.describeTool(toolName, input),
@@ -202,14 +280,26 @@ export class ClaudeSession extends BaseSession {
     return result;
   };
 
+  private toolSummary(name: string, input: Record<string, unknown>) {
+    const filePath = typeof input.file_path === 'string' ? input.file_path : input.notebook_path;
+    return {
+      tool: name,
+      title: this.describeTool(name, input),
+      detail: this.appTools.has(name) ? undefined : this.toolDetail(name, input),
+      ...(FILE_TOOLS.has(name) && typeof filePath === 'string' && { paths: [this.showPath(filePath)] }),
+    };
+  }
+
   private describeTool(name: string, input: unknown): string {
+    const appTool = this.appTools.get(name);
+    if (appTool) return appTool.title?.(input as never) ?? appTool.name;
     const fields = (input ?? {}) as Record<string, unknown>;
     if (typeof fields.file_path === 'string') return `${name} ${this.showPath(fields.file_path)}`;
     const subject = fields.command ?? fields.pattern ?? fields.url ?? fields.description;
     return typeof subject === 'string' ? `${name} ${subject}` : name;
   }
 
-  private toolDetail(name: string, input: Record<string, unknown>): string {
+  private toolDetail(name: string, input: Record<string, unknown>): string | undefined {
     if (name === 'Bash' && typeof input.command === 'string') return input.command;
     if (name === 'Edit' && typeof input.old_string === 'string' && typeof input.new_string === 'string') {
       return lineDiff(input.old_string, input.new_string);
@@ -217,6 +307,7 @@ export class ClaudeSession extends BaseSession {
     if (name === 'Write' && typeof input.content === 'string') {
       return input.content.split('\n').map((line) => `+${line}`).join('\n');
     }
+    if (name === 'Read' || name === 'Glob' || name === 'Grep') return undefined;
     return JSON.stringify(input, null, 2);
   }
 }
