@@ -37,7 +37,7 @@ const stream = (text: string): AgentEvent[] => [...text.match(/.{1,7}/gs)!.map((
 
 describe('conversation turns in a shared note', () => {
   it.each([false, true])('writes consecutive turns in order (typing: %s)', async (typing) => {
-    const note = new SharedNote({ path: 'Chat.md' } as TFile, '---\nhelenite: conversation\n---\n', '---\nhelenite: conversation\n---\n', { read: async () => '', author: () => undefined });
+    const note = new SharedNote({ path: 'Chat.md' } as TFile, '---\nduet: conversation\n---\n', '---\nduet: conversation\n---\n', { read: async () => '', author: () => undefined });
     if (typing) note.views.add({ visible: true });
     const peer = new AgentPeer(note, { name: 'Claude', color: '#d97757' }, () => typing);
     const first = 'The Meetings folder has one file.';
@@ -58,7 +58,7 @@ describe('conversation turns in a shared note', () => {
     ]);
     expect(note.content).toBe(
       [
-        '---\nhelenite: conversation\n---\n',
+        '---\nduet: conversation\n---\n',
         '> [!user]\n> What files?\n',
         '> [!activity]- Ran a command\n> - `Bash ls`\n>   ```\n>   a.md\n>   ```\n',
         `${first}\n`,

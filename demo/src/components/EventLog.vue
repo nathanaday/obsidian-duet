@@ -209,7 +209,7 @@ header p {
 }
 
 .permission {
-  --family: var(--helenite);
+  --family: var(--accent);
 }
 
 .closed {

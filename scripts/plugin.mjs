@@ -1,6 +1,6 @@
 // Builds the Obsidian plugin into plugin/dist.
 //   node scripts/plugin.mjs                  build once
-//   node scripts/plugin.mjs --vault <dir>    also install into <dir>/.obsidian/plugins/helenite
+//   node scripts/plugin.mjs --vault <dir>    also install into <dir>/.obsidian/plugins/duet
 //   node scripts/plugin.mjs --watch          rebuild and reinstall on every change
 import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -10,7 +10,7 @@ import { obsidianBundle } from './esbuild-options.mjs';
 
 const { values } = parseArgs({ options: { vault: { type: 'string' }, watch: { type: 'boolean' } } });
 const DIST = 'plugin/dist';
-const targets = [DIST, ...(values.vault ? [path.join(values.vault, '.obsidian/plugins/helenite')] : [])];
+const targets = [DIST, ...(values.vault ? [path.join(values.vault, '.obsidian/plugins/duet')] : [])];
 
 async function install() {
   for (const target of targets) {

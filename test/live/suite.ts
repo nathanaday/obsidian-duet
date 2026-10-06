@@ -22,13 +22,13 @@ export function liveSuite(harness: 'claude' | 'codex', extra: Partial<CreateSess
     });
 
     async function start(decision: PermissionDecision = 'allow', resume?: string) {
-      const cwd = mkdtempSync(path.join(tmpdir(), `helenite-${harness}-`));
+      const cwd = mkdtempSync(path.join(tmpdir(), `duet-${harness}-`));
       const requests: PermissionRequest[] = [];
       const events: AgentEvent[] = [];
       const session = await createSession({
         harness,
         cwd,
-        clientName: 'agent-helenite-test',
+        clientName: 'obsidian-duet-test',
         resume,
         onPermission: async (request) => {
           requests.push(request);
@@ -103,17 +103,17 @@ export function liveSuite(harness: 'claude' | 'codex', extra: Partial<CreateSess
     });
 
     it('follows instructions', { timeout: TIMEOUT }, async () => {
-      const cwd = mkdtempSync(path.join(tmpdir(), `helenite-${harness}-`));
+      const cwd = mkdtempSync(path.join(tmpdir(), `duet-${harness}-`));
       const session = await createSession({
         harness,
         cwd,
-        clientName: 'agent-helenite-test',
-        instructions: 'End every reply with the exact text [[helenite]].',
+        clientName: 'obsidian-duet-test',
+        instructions: 'End every reply with the exact text [[duet]].',
         ...extra,
       } as CreateSessionOptions);
       sessions.push(session);
       const result = await session.send('Say hello in two words.');
-      expect(result.text).toContain('[[helenite]]');
+      expect(result.text).toContain('[[duet]]');
     });
 
     it('resumes a session by id', { timeout: TIMEOUT }, async () => {

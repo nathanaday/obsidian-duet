@@ -1,6 +1,6 @@
 import { type App, PluginSettingTab, Setting } from 'obsidian';
 import type { ApprovalSetting, Harness } from '../../src/index.ts';
-import type HelenitePlugin from './main.ts';
+import type DuetPlugin from './main.ts';
 
 export interface AgentProfile {
   /** The tag without `@`. */
@@ -21,7 +21,7 @@ export interface AgentProfile {
   color: string;
 }
 
-export interface HeleniteSettings {
+export interface DuetSettings {
   profiles: AgentProfile[];
   /** Minutes before an idle agent process closes. Its conversation resumes on the next message. */
   idleMinutes: number;
@@ -33,7 +33,7 @@ export interface HeleniteSettings {
 
 export const AGENT_COLORS: Record<Harness, string> = { claude: '#d97757', codex: '#4f8cf7' };
 
-export const DEFAULT_SETTINGS: HeleniteSettings = {
+export const DEFAULT_SETTINGS: DuetSettings = {
   profiles: [
     { name: 'claude', harness: 'claude', executablePath: '', env: '', model: '', effort: '', approval: 'ask', userTools: false, color: AGENT_COLORS.claude },
     { name: 'codex', harness: 'codex', executablePath: '', env: '', model: '', effort: '', approval: 'ask', userTools: false, color: AGENT_COLORS.codex },
@@ -44,7 +44,7 @@ export const DEFAULT_SETTINGS: HeleniteSettings = {
 };
 
 /** Fills in settings that older versions of the plugin did not save. */
-export function upgradeSettings(saved: Partial<HeleniteSettings> | undefined): HeleniteSettings {
+export function upgradeSettings(saved: Partial<DuetSettings> | undefined): DuetSettings {
   const settings = { ...structuredClone(DEFAULT_SETTINGS), ...saved };
   settings.profiles = settings.profiles.map((profile) => ({
     ...DEFAULT_SETTINGS.profiles[0]!,
@@ -76,10 +76,10 @@ export function displayName(profile: AgentProfile): string {
   return profile.name.charAt(0).toUpperCase() + profile.name.slice(1);
 }
 
-export class HeleniteSettingTab extends PluginSettingTab {
+export class DuetSettingTab extends PluginSettingTab {
   constructor(
     app: App,
-    private readonly plugin: HelenitePlugin,
+    private readonly plugin: DuetPlugin,
   ) {
     super(app, plugin);
   }
@@ -89,7 +89,7 @@ export class HeleniteSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     containerEl.createEl('p', {
-      cls: 'helenite-settings-intro',
+      cls: 'duet-settings-intro',
       text: 'Write @name followed by a request on a line of a note, then press Enter. The agent replies in a callout under the line and can edit that note while you keep typing. For a longer exchange, run "New conversation" from the command palette.',
     });
 
@@ -142,13 +142,13 @@ export class HeleniteSettingTab extends PluginSettingTab {
   }
 
   private displayProfile(containerEl: HTMLElement, profile: AgentProfile, index: number): void {
-    const group = containerEl.createDiv({ cls: 'helenite-profile' });
+    const group = containerEl.createDiv({ cls: 'duet-profile' });
     const save = () => this.plugin.saveSettings();
 
     new Setting(group)
       .setName(`@${profile.name}`)
       .setDesc(HARNESS_NAMES[profile.harness])
-      .setClass('helenite-profile-title')
+      .setClass('duet-profile-title')
       .addExtraButton((button) =>
         button
           .setIcon('trash')

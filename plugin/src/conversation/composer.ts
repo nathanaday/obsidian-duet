@@ -46,22 +46,22 @@ export class Composer {
     readonly controller: ConversationController,
   ) {
     const container = view.containerEl;
-    container.addClass('helenite-has-composer');
-    this.root = view.contentEl.createDiv({ cls: 'helenite-composer' });
-    this.suggestEl = this.root.createDiv({ cls: 'helenite-suggest' });
-    this.approvalEl = this.root.createDiv({ cls: 'helenite-approval' });
-    this.endedEl = this.root.createDiv({ cls: 'helenite-ended' });
-    this.card = this.root.createDiv({ cls: 'helenite-composer-card' });
-    this.input = this.card.createEl('textarea', { cls: 'helenite-input', attr: { rows: '1', spellcheck: 'true' } });
-    const bar = this.card.createDiv({ cls: 'helenite-composer-bar' });
+    container.addClass('duet-has-composer');
+    this.root = view.contentEl.createDiv({ cls: 'duet-composer' });
+    this.suggestEl = this.root.createDiv({ cls: 'duet-suggest' });
+    this.approvalEl = this.root.createDiv({ cls: 'duet-approval' });
+    this.endedEl = this.root.createDiv({ cls: 'duet-ended' });
+    this.card = this.root.createDiv({ cls: 'duet-composer-card' });
+    this.input = this.card.createEl('textarea', { cls: 'duet-input', attr: { rows: '1', spellcheck: 'true' } });
+    const bar = this.card.createDiv({ cls: 'duet-composer-bar' });
     this.modelButton = this.chip(bar, 'cpu', 'Model', (event) => this.modelMenu(event));
     this.effortButton = this.chip(bar, 'gauge', 'Effort', (event) => this.effortMenu(event));
     this.modeButton = this.chip(bar, 'shield-check', 'When the agent asks first', (event) => this.modeMenu(event));
-    const link = bar.createEl('button', { cls: 'helenite-icon-button clickable-icon', attr: { 'aria-label': 'Link a note' } });
+    const link = bar.createEl('button', { cls: 'duet-icon-button clickable-icon', attr: { 'aria-label': 'Link a note' } });
     setIcon(link, 'link');
     link.addEventListener('click', () => this.insertAtCursor('[['));
-    this.statusEl = bar.createDiv({ cls: 'helenite-composer-status' });
-    this.sendButton = bar.createEl('button', { cls: 'helenite-send' });
+    this.statusEl = bar.createDiv({ cls: 'duet-composer-status' });
+    this.sendButton = bar.createEl('button', { cls: 'duet-send' });
     this.sendButton.addEventListener('click', () => (this.controller.working && !this.input.value.trim() ? void this.controller.interrupt() : this.submit()));
 
     this.input.addEventListener('input', () => {
@@ -83,7 +83,7 @@ export class Composer {
     });
     this.cleanup.push(() => this.app.keymap.popScope(scope));
 
-    const resize = new ResizeObserver(() => container.style.setProperty('--helenite-composer-height', `${this.root.offsetHeight}px`));
+    const resize = new ResizeObserver(() => container.style.setProperty('--duet-composer-height', `${this.root.offsetHeight}px`));
     resize.observe(this.root);
     this.cleanup.push(() => resize.disconnect());
     this.cleanup.push(controller.subscribe(() => this.render()));
@@ -100,14 +100,14 @@ export class Composer {
     for (const dispose of this.cleanup.splice(0)) dispose();
     this.controller.detach(this);
     this.root.remove();
-    this.view.containerEl.removeClass('helenite-has-composer');
-    this.view.containerEl.style.removeProperty('--helenite-composer-height');
+    this.view.containerEl.removeClass('duet-has-composer');
+    this.view.containerEl.style.removeProperty('--duet-composer-height');
   }
 
   private chip(parent: HTMLElement, icon: string, tooltip: string, onClick: (event: MouseEvent) => void): HTMLButtonElement {
-    const button = parent.createEl('button', { cls: 'helenite-chip' });
-    setIcon(button.createSpan({ cls: 'helenite-chip-icon' }), icon);
-    button.createSpan({ cls: 'helenite-chip-label' });
+    const button = parent.createEl('button', { cls: 'duet-chip' });
+    setIcon(button.createSpan({ cls: 'duet-chip-icon' }), icon);
+    button.createSpan({ cls: 'duet-chip-label' });
     setTooltip(button, tooltip, { placement: 'top' });
     button.addEventListener('click', (event) => {
       // The menu closes on a click outside it, and this click would count as one.
@@ -122,7 +122,7 @@ export class Composer {
     const ended = controller.ended;
     this.root.toggleClass('is-ended', ended);
     this.root.toggleClass('is-working', controller.working);
-    this.root.style.setProperty('--helenite-agent', controller.profile.color);
+    this.root.style.setProperty('--duet-agent', controller.profile.color);
     this.input.placeholder = `Message ${controller.agentName}   /  for commands   [[  to link notes`;
 
     this.endedEl.empty();
@@ -151,7 +151,7 @@ export class Composer {
   }
 
   private label(button: HTMLButtonElement, text: string): void {
-    button.querySelector('.helenite-chip-label')!.textContent = text;
+    button.querySelector('.duet-chip-label')!.textContent = text;
   }
 
   private renderApproval(approval: PendingApproval | undefined): void {
@@ -159,19 +159,19 @@ export class Composer {
     this.root.toggleClass('has-approval', Boolean(approval));
     if (!approval) return;
     const { request } = approval;
-    const head = this.approvalEl.createDiv({ cls: 'helenite-approval-head' });
-    setIcon(head.createSpan({ cls: 'helenite-approval-icon' }), FILE_TOOLS.has(request.tool) ? 'file-pen' : 'terminal');
-    head.createSpan({ cls: 'helenite-approval-title', text: `${this.controller.agentName} wants to ${actionOf(request.tool)}` });
-    this.approvalEl.createDiv({ cls: 'helenite-approval-subject', text: request.title });
+    const head = this.approvalEl.createDiv({ cls: 'duet-approval-head' });
+    setIcon(head.createSpan({ cls: 'duet-approval-icon' }), FILE_TOOLS.has(request.tool) ? 'file-pen' : 'terminal');
+    head.createSpan({ cls: 'duet-approval-title', text: `${this.controller.agentName} wants to ${actionOf(request.tool)}` });
+    this.approvalEl.createDiv({ cls: 'duet-approval-subject', text: request.title });
     if (request.detail && !request.title.includes(request.detail)) {
-      const pre = this.approvalEl.createEl('pre', { cls: 'helenite-approval-detail' });
+      const pre = this.approvalEl.createEl('pre', { cls: 'duet-approval-detail' });
       const diff = FILE_TOOLS.has(request.tool);
       for (const line of request.detail.split('\n')) {
         const kind = !diff ? '' : line.startsWith('+') ? 'is-add' : line.startsWith('-') ? 'is-remove' : line.startsWith('@@') ? 'is-hunk' : '';
-        pre.createSpan({ cls: `helenite-line ${kind}`, text: line || ' ' });
+        pre.createSpan({ cls: `duet-line ${kind}`, text: line || ' ' });
       }
     }
-    const choices = this.approvalEl.createDiv({ cls: 'helenite-approval-choices' });
+    const choices = this.approvalEl.createDiv({ cls: 'duet-approval-choices' });
     const choice = (label: string, key: string, decision: Parameters<PendingApproval['decide']>[0], primary = false) => {
       const button = choices.createEl('button', { cls: primary ? 'mod-cta' : '' });
       button.createSpan({ text: label });
@@ -306,9 +306,9 @@ export class Composer {
     this.suggestEl.empty();
     this.suggestEl.toggleClass('is-shown', this.suggestions.length > 0);
     this.suggestions.forEach((item, index) => {
-      const row = this.suggestEl.createDiv({ cls: `helenite-suggest-item${index === this.selected ? ' is-selected' : ''}` });
-      row.createSpan({ cls: 'helenite-suggest-label', text: item.label });
-      if (item.detail) row.createSpan({ cls: 'helenite-suggest-detail', text: item.detail });
+      const row = this.suggestEl.createDiv({ cls: `duet-suggest-item${index === this.selected ? ' is-selected' : ''}` });
+      row.createSpan({ cls: 'duet-suggest-label', text: item.label });
+      if (item.detail) row.createSpan({ cls: 'duet-suggest-detail', text: item.detail });
       row.addEventListener('mousedown', (event) => {
         event.preventDefault();
         this.accept(item);
@@ -416,7 +416,7 @@ export class Composer {
     const content = this.view.getMode() === 'preview' ? scroller.querySelector('.markdown-preview-sizer') : scroller.querySelector('.cm-content');
     if (!content) return;
     const lastLine = content.lastElementChild?.getBoundingClientRect();
-    const box = this.root.querySelector('.helenite-composer-card')!.getBoundingClientRect();
+    const box = this.root.querySelector('.duet-composer-card')!.getBoundingClientRect();
     if (!lastLine) return;
     const delta = lastLine.bottom - (box.top - 24);
     if (delta > 1 || delta < -scroller.clientHeight / 2) scroller.scrollBy({ top: delta, behavior });

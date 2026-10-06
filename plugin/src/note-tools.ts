@@ -82,7 +82,7 @@ export class NoteTools {
 
   get tools(): ToolSet {
     return {
-      name: 'helenite',
+      name: 'duet',
       description: `Read and change the note that the user asked you in. In the note text, the line ${PLACEHOLDER} stands for the user's request and your reply, which stay where they are.`,
       tools: [
         defineTool({

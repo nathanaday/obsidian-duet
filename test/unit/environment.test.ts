@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { pathDisplay } from '../../src/environment.ts';
 
 describe('pathDisplay', () => {
-  const cwd = mkdtempSync(path.join(tmpdir(), 'helenite-paths-'));
+  const cwd = mkdtempSync(path.join(tmpdir(), 'duet-paths-'));
   const show = pathDisplay(cwd);
 
   it('shows paths inside the working directory relative to it', () => {

@@ -94,7 +94,7 @@ async function copyId() {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  background: var(--helenite);
+  background: var(--accent);
 }
 
 .status.working::before {

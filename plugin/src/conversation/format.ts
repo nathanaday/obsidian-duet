@@ -2,9 +2,9 @@ import { inlineCode } from '../text.ts';
 import { quote } from '../callout.ts';
 
 /** The frontmatter property that marks a conversation note. */
-export const KIND_KEY = 'helenite';
+export const KIND_KEY = 'duet';
 export const KIND = 'conversation';
-export const CSS_CLASS = 'helenite-conversation';
+export const CSS_CLASS = 'duet-conversation';
 
 const OUTPUT_LINES = 24;
 

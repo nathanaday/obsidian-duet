@@ -188,7 +188,7 @@ export class EditorBinding implements NoteView {
         annotations: [syncAnnotation.of(origin), Transaction.addToHistory.of(false), Transaction.remote.of(true)],
       });
     } catch (error) {
-      console.error('Helenite: could not apply a shared change to the editor', error);
+      console.error('Duet: could not apply a shared change to the editor', error);
     }
     if (this.note && this.view.state.doc.length !== this.note.text.length) queueMicrotask(() => this.resync());
   }

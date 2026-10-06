@@ -1,5 +1,5 @@
 {
-  "name": "agent-helenite",
+  "name": "obsidian-duet",
   "version": "0.1.0",
   "description": "Drive Claude Code and Codex agent sessions from a TypeScript app.",
   "license": "MIT",

@@ -4,7 +4,7 @@ import { access, constants } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
-const MARKER = '__AGENT_HELENITE_PATH__';
+const MARKER = '__OBSIDIAN_DUET_PATH__';
 const COMMON_DIRS = ['.local/bin', '.npm-global/bin', '.bun/bin', '.volta/bin'].map((dir) =>
   path.join(homedir(), dir),
 );

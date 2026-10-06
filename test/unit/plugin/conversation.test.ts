@@ -7,7 +7,7 @@ describe('conversation notes', () => {
   const note = newConversation({ agent: 'claude', model: 'opus', status: 'active', created: '2026-10-05 14:02' });
 
   it('creates frontmatter that marks the note and styles it', () => {
-    expect(note).toBe('---\nhelenite: conversation\nagent: claude\nmodel: opus\nstatus: active\ncreated: 2026-10-05 14:02\ncssclasses:\n  - helenite-conversation\n---\n');
+    expect(note).toBe('---\nduet: conversation\nagent: claude\nmodel: opus\nstatus: active\ncreated: 2026-10-05 14:02\ncssclasses:\n  - duet-conversation\n---\n');
   });
 
   it('changes, adds and removes frontmatter properties', () => {
@@ -16,7 +16,7 @@ describe('conversation notes', () => {
       return edit ? applyOps(text, [edit]) : text;
     };
     expect(set(note, 'status', 'ended')).toContain('\nstatus: ended\n');
-    expect(set(note, 'session', 'abc')).toContain('  - helenite-conversation\nsession: abc\n---\n');
+    expect(set(note, 'session', 'abc')).toContain('  - duet-conversation\nsession: abc\n---\n');
     expect(set(note, 'model')).not.toContain('model:');
     expect(frontmatterEdit('no frontmatter', 'a', 'b')).toBeUndefined();
   });

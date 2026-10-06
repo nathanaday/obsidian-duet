@@ -197,7 +197,7 @@ watch(
 }
 
 .suggestions button:hover {
-  border-color: var(--helenite);
+  border-color: var(--accent);
 }
 
 .user {
@@ -256,7 +256,7 @@ watch(
 }
 
 .agent :deep(a) {
-  color: var(--helenite);
+  color: var(--accent);
   text-underline-offset: 2px;
 }
 
@@ -288,7 +288,7 @@ watch(
   height: 1em;
   margin-left: 0.15em;
   vertical-align: -0.15em;
-  background: var(--helenite);
+  background: var(--accent);
   animation: caret 1s steps(2) infinite;
 }
 
@@ -338,7 +338,7 @@ watch(
   width: 0.32rem;
   height: 0.32rem;
   border-radius: 50%;
-  background: var(--helenite);
+  background: var(--accent);
   animation: dot 1.2s ease-in-out infinite;
 }
 
@@ -373,8 +373,8 @@ watch(
 }
 
 .field:focus-within {
-  border-color: var(--helenite);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--helenite) 18%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 textarea {

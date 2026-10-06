@@ -5,9 +5,9 @@ import type { AgentPeer } from './agent-peer.ts';
 import { type TextOp, diffOps } from './text-ops.ts';
 
 /** Origin of changes that the plugin makes for the user, for example a message sent from the composer. */
-export const LOCAL_ORIGIN = Symbol('helenite-local');
+export const LOCAL_ORIGIN = Symbol('duet-local');
 /** Origin of changes that came from the file on disk without a known author. */
-export const DISK_ORIGIN = Symbol('helenite-disk');
+export const DISK_ORIGIN = Symbol('duet-disk');
 
 export interface PresenceState {
   name: string;
@@ -112,7 +112,7 @@ export class SharedNote {
 
   /** Reads the file and merges a change that another program made. Calls run one at a time. */
   checkDisk(): Promise<void> {
-    this.diskWork = this.diskWork.then(() => this.mergeDisk()).catch((error) => console.error('Helenite: could not merge a disk change', error));
+    this.diskWork = this.diskWork.then(() => this.mergeDisk()).catch((error) => console.error('Duet: could not merge a disk change', error));
     return this.diskWork;
   }
 

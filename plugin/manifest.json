@@ -1,6 +1,6 @@
 {
-  "id": "helenite",
-  "name": "Helenite",
+  "id": "duet",
+  "name": "Duet",
   "version": "0.1.0",
   "minAppVersion": "1.8.0",
   "description": "Work with Claude Code or Codex in your notes. Mention an agent on a line, or chat in a conversation note. You see the agent edit the note live while you type.",

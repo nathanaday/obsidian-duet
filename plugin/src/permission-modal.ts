@@ -50,22 +50,22 @@ class PermissionModal extends Modal {
 
   onOpen(): void {
     const { request, context } = this;
-    this.modalEl.addClass('helenite-permission');
+    this.modalEl.addClass('duet-permission');
     this.titleEl.setText(`${context.agent} wants to ${action(request.tool)}`);
     const { contentEl } = this;
-    contentEl.createEl('p', { cls: 'helenite-permission-note', text: `From ${context.notePath}` });
-    contentEl.createEl('p', { cls: 'helenite-permission-title', text: request.title });
+    contentEl.createEl('p', { cls: 'duet-permission-note', text: `From ${context.notePath}` });
+    contentEl.createEl('p', { cls: 'duet-permission-title', text: request.title });
 
     if (request.detail && !request.title.includes(request.detail)) {
-      const pre = contentEl.createEl('pre', { cls: 'helenite-permission-detail' });
+      const pre = contentEl.createEl('pre', { cls: 'duet-permission-detail' });
       const isDiff = FILE_TOOLS.has(request.tool);
       for (const line of request.detail.split('\n')) {
         const kind = !isDiff ? '' : line.startsWith('+') ? 'is-add' : line.startsWith('-') ? 'is-remove' : line.startsWith('@@') ? 'is-hunk' : '';
-        pre.createSpan({ cls: `helenite-line ${kind}`, text: line || ' ' });
+        pre.createSpan({ cls: `duet-line ${kind}`, text: line || ' ' });
       }
     }
 
-    const choices = contentEl.createDiv({ cls: 'helenite-permission-choices' });
+    const choices = contentEl.createDiv({ cls: 'duet-permission-choices' });
     const choice = (label: string, key: string, decision: PermissionDecision, primary = false) => {
       const button = choices.createEl('button', { cls: primary ? 'mod-cta' : '' });
       button.createSpan({ text: label });

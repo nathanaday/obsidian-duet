@@ -381,7 +381,7 @@ export class CodexSession extends BaseSession {
       case 'mcpServer/elicitation/request':
         return { action: 'decline', content: null, _meta: null };
       default:
-        throw new RpcError(-32601, `agent-helenite does not support ${method}`);
+        throw new RpcError(-32601, `obsidian-duet does not support ${method}`);
     }
   }
 

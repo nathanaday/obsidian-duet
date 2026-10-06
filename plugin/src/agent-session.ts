@@ -27,7 +27,7 @@ export interface StartOptions {
 
 export function vaultRoot(app: App): string {
   const adapter = app.vault.adapter;
-  if (!(adapter instanceof FileSystemAdapter)) throw new Error('Helenite needs a vault on the local file system.');
+  if (!(adapter instanceof FileSystemAdapter)) throw new Error('Duet needs a vault on the local file system.');
   return adapter.getBasePath();
 }
 
@@ -38,7 +38,7 @@ export async function startAgent(app: App, options: StartOptions): Promise<Agent
     ({
       harness: profile.harness,
       cwd: vaultRoot(app),
-      clientName: 'obsidian-helenite',
+      clientName: 'obsidian-duet',
       executablePath: profile.executablePath || undefined,
       env: {
         ...(profile.harness === 'claude' && { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' }),

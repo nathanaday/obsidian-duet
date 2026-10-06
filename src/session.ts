@@ -245,7 +245,7 @@ export abstract class BaseSession implements AgentSession {
       try {
         listener(event);
       } catch (error) {
-        console.error('agent-helenite: event listener threw', error);
+        console.error('obsidian-duet: event listener threw', error);
       }
     }
   }

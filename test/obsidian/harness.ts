@@ -21,10 +21,10 @@ export interface ObsidianInstance {
  * with the built plugin installed and enabled. The user's own Obsidian and vaults are not touched.
  */
 export async function launchObsidian(pluginData?: unknown): Promise<ObsidianInstance> {
-  const root = await mkdtemp(path.join(tmpdir(), 'helenite-obsidian-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'duet-obsidian-'));
   const vault = path.join(root, 'vault');
   const profile = path.join(root, 'profile');
-  const pluginDir = path.join(vault, '.obsidian/plugins/helenite');
+  const pluginDir = path.join(vault, '.obsidian/plugins/duet');
 
   await cp('demo/sample-vault', vault, { recursive: true });
   await mkdir(pluginDir, { recursive: true });
@@ -33,7 +33,7 @@ export async function launchObsidian(pluginData?: unknown): Promise<ObsidianInst
   await mkdir(profile);
   await writeFile(
     path.join(profile, 'obsidian.json'),
-    JSON.stringify({ vaults: { helenitetest00001: { path: vault, ts: Date.now(), open: true } } }),
+    JSON.stringify({ vaults: { duettest00001: { path: vault, ts: Date.now(), open: true } } }),
   );
 
   const port = await freePort();
@@ -48,9 +48,9 @@ export async function launchObsidian(pluginData?: unknown): Promise<ObsidianInst
       // The plugin is not in community-plugins.json yet, so turning on community plugins loads nothing,
       // and enablePluginAndSave loads it exactly once.
       plugins.setEnable(true);
-      await plugins.enablePluginAndSave('helenite');
+      await plugins.enablePluginAndSave('duet');
     });
-    await page.waitForFunction(() => !!(window as any).app.plugins.plugins.helenite, undefined, { timeout: 10_000 });
+    await page.waitForFunction(() => !!(window as any).app.plugins.plugins.duet, undefined, { timeout: 10_000 });
     // Turning on community plugins opens the settings window a moment later. It would take the keyboard.
     await page.waitForSelector('.modal-container', { timeout: 3_000 }).catch(() => undefined);
     for (let attempt = 0; attempt < 5 && (await page.$('.modal-container')); attempt++) {

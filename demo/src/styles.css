@@ -7,9 +7,9 @@
   --muted: #69736e;
   --line: #d4d8d3;
   --line-strong: #b8beb8;
-  --helenite: #0e6b50;
-  --helenite-hover: #0b5a43;
-  --helenite-tint: #dbeae3;
+  --accent: #0e6b50;
+  --accent-hover: #0b5a43;
+  --accent-tint: #dbeae3;
   --rust: #a8442f;
   --amber: #8f6411;
   --focus: #1b8f6b;
@@ -36,9 +36,9 @@
     --muted: #8a948f;
     --line: #29302d;
     --line-strong: #3b4440;
-    --helenite: #279471;
-    --helenite-hover: #2fa67f;
-    --helenite-tint: #163229;
+    --accent: #279471;
+    --accent-hover: #2fa67f;
+    --accent-tint: #163229;
     --rust: #e3826b;
     --amber: #d9a648;
     --focus: #4fc79e;
@@ -122,13 +122,13 @@ kbd {
 }
 
 .button.primary {
-  border-color: var(--helenite);
-  background: var(--helenite);
+  border-color: var(--accent);
+  background: var(--accent);
   color: #fff;
 }
 
 .button.primary:hover:not(:disabled) {
-  background: var(--helenite-hover);
+  background: var(--accent-hover);
 }
 
 .button.quiet {

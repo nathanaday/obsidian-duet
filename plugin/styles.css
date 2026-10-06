@@ -7,7 +7,7 @@
   --callout-color: 79, 199, 158;
 }
 
-.helenite-status.is-working::before {
+.duet-status.is-working::before {
   content: '';
   display: inline-block;
   width: 0.5em;
@@ -15,66 +15,66 @@
   margin-right: 0.4em;
   border-radius: 50%;
   background: rgb(79, 199, 158);
-  animation: helenite-pulse 1.2s ease-in-out infinite;
+  animation: duet-pulse 1.2s ease-in-out infinite;
 }
 
-@keyframes helenite-pulse {
+@keyframes duet-pulse {
   50% {
     opacity: 0.3;
   }
 }
 
-.helenite-settings-intro {
+.duet-settings-intro {
   color: var(--text-muted);
 }
 
-.helenite-profile {
+.duet-profile {
   margin-bottom: var(--size-4-4);
   padding: 0 var(--size-4-3);
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
 }
 
-.helenite-profile-title .setting-item-name {
+.duet-profile-title .setting-item-name {
   font-family: var(--font-monospace);
   font-weight: var(--font-semibold);
 }
 
-.modal.helenite-permission {
-  --helenite-glass-text: #eaf6f0;
+.modal.duet-permission {
+  --duet-glass-text: #eaf6f0;
   width: min(36rem, 92vw);
   border: 0;
   background: linear-gradient(158deg, #15805f 0%, #0c5a45 48%, #083d2f 100%);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.2),
     0 24px 60px -20px rgb(8 64 47 / 0.8);
-  color: var(--helenite-glass-text);
+  color: var(--duet-glass-text);
 }
 
-.modal.helenite-permission .modal-title {
+.modal.duet-permission .modal-title {
   color: #a9d6c4;
   font-size: var(--font-ui-medium);
   font-weight: var(--font-medium);
 }
 
-.modal.helenite-permission .modal-close-button {
+.modal.duet-permission .modal-close-button {
   color: #a9d6c4;
 }
 
-.helenite-permission-note {
+.duet-permission-note {
   margin: -0.4em 0 0.6em;
   color: #a9d6c4;
   font-size: var(--font-ui-small);
   opacity: 0.85;
 }
 
-.helenite-permission-title {
+.duet-permission-title {
   margin: 0;
   font-family: var(--font-monospace);
   overflow-wrap: anywhere;
 }
 
-.helenite-permission-detail {
+.duet-permission-detail {
   max-height: 16rem;
   margin: 0.9em 0 0;
   padding: 0.6em 0;
@@ -87,53 +87,53 @@
   overflow-wrap: anywhere;
 }
 
-.helenite-line {
+.duet-line {
   display: block;
   padding: 0 0.9em;
 }
 
-.helenite-line.is-add {
+.duet-line.is-add {
   background: rgb(120 230 180 / 0.12);
   color: #a6f2cd;
 }
 
-.helenite-line.is-remove {
+.duet-line.is-remove {
   background: rgb(240 140 120 / 0.12);
   color: #f6bcae;
 }
 
-.helenite-line.is-hunk {
+.duet-line.is-hunk {
   color: #a9d6c4;
   opacity: 0.7;
 }
 
-.helenite-permission-choices {
+.duet-permission-choices {
   display: flex;
   flex-wrap: wrap;
   gap: var(--size-4-2);
   margin-top: var(--size-4-4);
 }
 
-.helenite-permission-choices button {
+.duet-permission-choices button {
   display: inline-flex;
   gap: 0.55em;
   border: 1px solid rgb(255 255 255 / 0.22);
   background: rgb(255 255 255 / 0.06);
   box-shadow: none;
-  color: var(--helenite-glass-text);
+  color: var(--duet-glass-text);
 }
 
-.helenite-permission-choices button:hover {
+.duet-permission-choices button:hover {
   background: rgb(255 255 255 / 0.14);
 }
 
-.helenite-permission-choices button.mod-cta {
+.duet-permission-choices button.mod-cta {
   border-color: transparent;
-  background: var(--helenite-glass-text);
+  background: var(--duet-glass-text);
   color: #083d2f;
 }
 
-.helenite-permission-choices kbd {
+.duet-permission-choices kbd {
   padding: 0 0.3em;
   border: 1px solid currentColor;
   border-radius: 4px;
@@ -144,36 +144,36 @@
 
 /* Agent presence: caret, name flag, selection, fresh text, edge pill. */
 
-.helenite-presence {
+.duet-presence {
   pointer-events: none;
   contain: size style;
 }
 
-.helenite-caret {
+.duet-caret {
   position: absolute;
   top: 0;
   left: 0;
   width: 2px;
   margin-left: -1px;
   border-radius: 1px;
-  background: var(--helenite-agent);
+  background: var(--duet-agent);
   transition:
     transform 110ms cubic-bezier(0.2, 0.7, 0.3, 1),
     height 110ms ease;
   will-change: transform;
 }
 
-.helenite-caret::after {
+.duet-caret::after {
   content: '';
   position: absolute;
   inset: -1px -2px;
   border-radius: 2px;
-  background: var(--helenite-agent);
+  background: var(--duet-agent);
   opacity: 0.18;
-  animation: helenite-caret-glow 1.6s ease-in-out infinite;
+  animation: duet-caret-glow 1.6s ease-in-out infinite;
 }
 
-.helenite-caret-flag {
+.duet-caret-flag {
   position: absolute;
   bottom: 100%;
   left: -1px;
@@ -184,18 +184,18 @@
   margin-bottom: 3px;
   padding: 1px 7px 2px;
   border-radius: 6px 6px 6px 1px;
-  background: var(--helenite-agent);
-  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--helenite-agent) 60%, transparent);
+  background: var(--duet-agent);
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--duet-agent) 60%, transparent);
   color: white;
   font-family: var(--font-interface);
   font-size: 11px;
   font-weight: 600;
   line-height: 1.5;
   white-space: nowrap;
-  animation: helenite-flag-in 160ms ease-out;
+  animation: duet-flag-in 160ms ease-out;
 }
 
-.helenite-caret.is-near-top .helenite-caret-flag {
+.duet-caret.is-near-top .duet-caret-flag {
   top: 100%;
   bottom: auto;
   margin-top: 3px;
@@ -203,33 +203,33 @@
   border-radius: 1px 6px 6px 6px;
 }
 
-.helenite-caret-status {
+.duet-caret-status {
   overflow: hidden;
   font-weight: 450;
   opacity: 0.85;
   text-overflow: ellipsis;
 }
 
-.helenite-caret:not(.has-status) .helenite-caret-status {
+.duet-caret:not(.has-status) .duet-caret-status {
   display: none;
 }
 
-.helenite-agent-selection {
+.duet-agent-selection {
   position: absolute;
   border-radius: 2px;
-  background: color-mix(in srgb, var(--helenite-agent) 26%, transparent);
+  background: color-mix(in srgb, var(--duet-agent) 26%, transparent);
 }
 
-.helenite-fresh {
+.duet-fresh {
   border-radius: 2px;
-  background: color-mix(in srgb, var(--helenite-agent) 20%, transparent);
+  background: color-mix(in srgb, var(--duet-agent) 20%, transparent);
 }
 
-.helenite-fresh.is-fading {
-  animation: helenite-fade 1s ease-out forwards;
+.duet-fresh.is-fading {
+  animation: duet-fade 1s ease-out forwards;
 }
 
-.helenite-edge {
+.duet-edge {
   position: absolute;
   z-index: 5;
   left: 50%;
@@ -237,8 +237,8 @@
   padding: 3px 12px 4px;
   border: 0;
   border-radius: 999px;
-  background: var(--helenite-agent);
-  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--helenite-agent) 70%, transparent);
+  background: var(--duet-agent);
+  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--duet-agent) 70%, transparent);
   color: white;
   font-size: var(--font-ui-smaller);
   font-weight: 600;
@@ -246,75 +246,75 @@
   transform: translateX(-50%);
 }
 
-.helenite-edge.is-shown {
+.duet-edge.is-shown {
   display: block;
-  animation: helenite-flag-in 160ms ease-out;
+  animation: duet-flag-in 160ms ease-out;
 }
 
-.helenite-edge[data-edge='top'] {
+.duet-edge[data-edge='top'] {
   top: 10px;
 }
 
-.helenite-edge[data-edge='bottom'] {
+.duet-edge[data-edge='bottom'] {
   bottom: 14px;
 }
 
-@keyframes helenite-caret-glow {
+@keyframes duet-caret-glow {
   50% {
     opacity: 0.04;
   }
 }
 
-@keyframes helenite-flag-in {
+@keyframes duet-flag-in {
   from {
     opacity: 0;
     transform: translateY(3px);
   }
 }
 
-.helenite-edge.is-shown {
-  animation-name: helenite-edge-in;
+.duet-edge.is-shown {
+  animation-name: duet-edge-in;
 }
 
-@keyframes helenite-edge-in {
+@keyframes duet-edge-in {
   from {
     opacity: 0;
     transform: translate(-50%, 4px);
   }
 }
 
-@keyframes helenite-fade {
+@keyframes duet-fade {
   to {
     background: transparent;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .helenite-caret {
+  .duet-caret {
     transition: none;
   }
-  .helenite-caret::after {
+  .duet-caret::after {
     animation: none;
   }
 }
 
-.helenite-caret.is-near-right .helenite-caret-flag {
+.duet-caret.is-near-right .duet-caret-flag {
   right: -1px;
   left: auto;
   border-radius: 6px 6px 1px 6px;
 }
 
-.helenite-caret.is-near-right.is-near-top .helenite-caret-flag {
+.duet-caret.is-near-right.is-near-top .duet-caret-flag {
   border-radius: 6px 1px 6px 6px;
 }
 
 /* Conversation notes: a chat layout for the record. */
 
-.helenite-conversation {
-  --helenite-bubble: color-mix(in srgb, var(--interactive-accent) 9%, var(--background-primary));
+.duet-conversation {
+  --duet-bubble: color-mix(in srgb, var(--interactive-accent) 9%, var(--background-primary));
 }
 
-.helenite-conversation .callout[data-callout='user'] {
+.duet-conversation .callout[data-callout='user'] {
   --callout-icon: user-round;
   width: fit-content;
   max-width: min(82%, 38rem);
@@ -322,23 +322,23 @@
   padding: 0.55em 1em 0.6em;
   border: 0;
   border-radius: 18px 18px 5px 18px;
-  background: var(--helenite-bubble);
+  background: var(--duet-bubble);
   mix-blend-mode: normal;
 }
 
-.helenite-conversation .callout[data-callout='user'] > .callout-title {
+.duet-conversation .callout[data-callout='user'] > .callout-title {
   display: none;
 }
 
-.helenite-conversation .callout[data-callout='user'] > .callout-content > :first-child {
+.duet-conversation .callout[data-callout='user'] > .callout-content > :first-child {
   margin-top: 0;
 }
 
-.helenite-conversation .callout[data-callout='user'] > .callout-content > :last-child {
+.duet-conversation .callout[data-callout='user'] > .callout-content > :last-child {
   margin-bottom: 0;
 }
 
-.helenite-conversation .cm-embed-block.cm-callout:has(.callout[data-callout='user']) {
+.duet-conversation .cm-embed-block.cm-callout:has(.callout[data-callout='user']) {
   display: flex;
 }
 
@@ -347,7 +347,7 @@
   --callout-icon: sparkles;
 }
 
-.helenite-conversation .callout[data-callout='activity'] {
+.duet-conversation .callout[data-callout='activity'] {
   margin: 0.4em 0 0.8em;
   padding: 0;
   border: 0;
@@ -355,7 +355,7 @@
   font-size: var(--font-ui-small);
 }
 
-.helenite-conversation .callout[data-callout='activity'] > .callout-title {
+.duet-conversation .callout[data-callout='activity'] > .callout-title {
   gap: 0.45em;
   width: fit-content;
   padding: 0.15em 0.6em 0.15em 0.4em;
@@ -364,39 +364,39 @@
   font-weight: var(--font-normal);
 }
 
-.helenite-conversation .callout[data-callout='activity'] > .callout-title:hover {
+.duet-conversation .callout[data-callout='activity'] > .callout-title:hover {
   background: var(--background-modifier-hover);
 }
 
-.helenite-conversation .callout[data-callout='activity'] .callout-icon {
+.duet-conversation .callout[data-callout='activity'] .callout-icon {
   color: var(--text-faint);
 }
 
-.helenite-conversation .callout[data-callout='activity'] > .callout-content {
+.duet-conversation .callout[data-callout='activity'] > .callout-content {
   margin: 0.3em 0 0 0.9em;
   padding: 0.1em 0 0.1em 0.9em;
   border-left: 2px solid var(--background-modifier-border);
   color: var(--text-muted);
 }
 
-.helenite-conversation .callout[data-callout='activity'] pre {
+.duet-conversation .callout[data-callout='activity'] pre {
   max-height: 18em;
   font-size: var(--font-smallest);
 }
 
 /* The message box. */
 
-.helenite-has-composer .view-content {
+.duet-has-composer .view-content {
   position: relative;
 }
 
-.helenite-has-composer .markdown-source-view.mod-cm6 .cm-sizer,
-.helenite-has-composer .markdown-preview-sizer {
-  padding-bottom: calc(var(--helenite-composer-height, 140px) + 48px) !important;
+.duet-has-composer .markdown-source-view.mod-cm6 .cm-sizer,
+.duet-has-composer .markdown-preview-sizer {
+  padding-bottom: calc(var(--duet-composer-height, 140px) + 48px) !important;
 }
 
-.helenite-composer {
-  --helenite-agent: var(--interactive-accent);
+.duet-composer {
+  --duet-agent: var(--interactive-accent);
   position: absolute;
   z-index: 4;
   right: 0;
@@ -411,12 +411,12 @@
   pointer-events: none;
 }
 
-.helenite-composer > * {
+.duet-composer > * {
   width: min(var(--file-line-width), 100%);
   pointer-events: auto;
 }
 
-.helenite-composer-card {
+.duet-composer-card {
   position: relative;
   border: 1px solid var(--background-modifier-border);
   border-radius: 16px;
@@ -429,18 +429,18 @@
     box-shadow 140ms ease;
 }
 
-.helenite-composer-card:focus-within {
-  border-color: color-mix(in srgb, var(--helenite-agent) 55%, var(--background-modifier-border));
+.duet-composer-card:focus-within {
+  border-color: color-mix(in srgb, var(--duet-agent) 55%, var(--background-modifier-border));
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--helenite-agent) 14%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--duet-agent) 14%, transparent),
     0 8px 28px -12px rgb(0 0 0 / 0.22);
 }
 
-.helenite-composer.is-ended .helenite-composer-card {
+.duet-composer.is-ended .duet-composer-card {
   display: none;
 }
 
-textarea.helenite-input {
+textarea.duet-input {
   display: block;
   width: 100%;
   min-height: 2.6em;
@@ -455,21 +455,21 @@ textarea.helenite-input {
   resize: none;
 }
 
-textarea.helenite-input:focus,
-textarea.helenite-input:hover {
+textarea.duet-input:focus,
+textarea.duet-input:hover {
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.helenite-composer-bar {
+.duet-composer-bar {
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 4px 8px 8px;
 }
 
-button.helenite-chip {
+button.duet-chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -484,28 +484,28 @@ button.helenite-chip {
   cursor: pointer;
 }
 
-button.helenite-chip:hover {
+button.duet-chip:hover {
   background: var(--background-modifier-hover);
   color: var(--text-normal);
 }
 
-button.helenite-chip.is-hidden {
+button.duet-chip.is-hidden {
   display: none;
 }
 
-.helenite-chip-icon,
-.helenite-chip-icon svg {
+.duet-chip-icon,
+.duet-chip-icon svg {
   width: 14px;
   height: 14px;
 }
 
-.helenite-icon-button.clickable-icon {
+.duet-icon-button.clickable-icon {
   width: 26px;
   height: 26px;
   padding: 0;
 }
 
-.helenite-composer-status {
+.duet-composer-status {
   overflow: hidden;
   flex: 1;
   padding: 0 8px;
@@ -516,19 +516,19 @@ button.helenite-chip.is-hidden {
   white-space: nowrap;
 }
 
-.helenite-composer.is-working .helenite-composer-status::before {
+.duet-composer.is-working .duet-composer-status::before {
   content: '';
   display: inline-block;
   width: 7px;
   height: 7px;
   margin-right: 7px;
   border-radius: 50%;
-  background: var(--helenite-agent);
+  background: var(--duet-agent);
   vertical-align: 1px;
-  animation: helenite-pulse 1.2s ease-in-out infinite;
+  animation: duet-pulse 1.2s ease-in-out infinite;
 }
 
-button.helenite-send {
+button.duet-send {
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -538,7 +538,7 @@ button.helenite-send {
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--helenite-agent);
+  background: var(--duet-agent);
   box-shadow: none;
   color: white;
   cursor: pointer;
@@ -547,29 +547,29 @@ button.helenite-send {
     opacity 140ms ease;
 }
 
-button.helenite-send:hover:not(:disabled) {
+button.duet-send:hover:not(:disabled) {
   transform: scale(1.06);
 }
 
-button.helenite-send:disabled {
+button.duet-send:disabled {
   background: var(--background-modifier-border);
   color: var(--text-faint);
   cursor: default;
 }
 
-button.helenite-send svg {
+button.duet-send svg {
   width: 16px;
   height: 16px;
   stroke-width: 2.5;
 }
 
-button.helenite-send.is-stop svg {
+button.duet-send.is-stop svg {
   width: 11px;
   height: 11px;
   fill: currentColor;
 }
 
-.helenite-suggest {
+.duet-suggest {
   display: none;
   overflow-y: auto;
   max-height: 280px;
@@ -580,12 +580,12 @@ button.helenite-send.is-stop svg {
   box-shadow: var(--shadow-l);
 }
 
-.helenite-suggest.is-shown {
+.duet-suggest.is-shown {
   display: block;
-  animation: helenite-flag-in 120ms ease-out;
+  animation: duet-flag-in 120ms ease-out;
 }
 
-.helenite-suggest-item {
+.duet-suggest-item {
   display: flex;
   align-items: baseline;
   gap: 10px;
@@ -594,17 +594,17 @@ button.helenite-send.is-stop svg {
   cursor: pointer;
 }
 
-.helenite-suggest-item.is-selected {
+.duet-suggest-item.is-selected {
   background: var(--background-modifier-hover);
 }
 
-.helenite-suggest-label {
+.duet-suggest-label {
   flex: none;
   font-family: var(--font-monospace);
   font-size: var(--font-ui-small);
 }
 
-.helenite-suggest-detail {
+.duet-suggest-detail {
   overflow: hidden;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
@@ -612,33 +612,33 @@ button.helenite-send.is-stop svg {
   white-space: nowrap;
 }
 
-.helenite-approval {
+.duet-approval {
   display: none;
   padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--helenite-agent) 45%, var(--background-modifier-border));
+  border: 1px solid color-mix(in srgb, var(--duet-agent) 45%, var(--background-modifier-border));
   border-radius: 14px;
-  background: color-mix(in srgb, var(--helenite-agent) 7%, var(--background-primary));
+  background: color-mix(in srgb, var(--duet-agent) 7%, var(--background-primary));
   box-shadow: var(--shadow-l);
 }
 
-.helenite-composer.has-approval .helenite-approval {
+.duet-composer.has-approval .duet-approval {
   display: block;
-  animation: helenite-flag-in 160ms ease-out;
+  animation: duet-flag-in 160ms ease-out;
 }
 
-.helenite-approval-head {
+.duet-approval-head {
   display: flex;
   align-items: center;
   gap: 8px;
   font-weight: var(--font-semibold);
 }
 
-.helenite-approval-icon {
+.duet-approval-icon {
   display: inline-flex;
-  color: var(--helenite-agent);
+  color: var(--duet-agent);
 }
 
-.helenite-approval-subject {
+.duet-approval-subject {
   margin: 4px 0 0 26px;
   overflow-wrap: anywhere;
   color: var(--text-muted);
@@ -646,7 +646,7 @@ button.helenite-send.is-stop svg {
   font-size: var(--font-ui-smaller);
 }
 
-.helenite-approval-detail {
+.duet-approval-detail {
   max-height: 14rem;
   margin: 10px 0 0;
   padding: 6px 0;
@@ -658,36 +658,36 @@ button.helenite-send.is-stop svg {
   white-space: pre-wrap;
 }
 
-.helenite-approval-detail .helenite-line.is-add {
+.duet-approval-detail .duet-line.is-add {
   background: rgb(46 160 67 / 0.15);
   color: var(--text-normal);
 }
 
-.helenite-approval-detail .helenite-line.is-remove {
+.duet-approval-detail .duet-line.is-remove {
   background: rgb(248 81 73 / 0.15);
   color: var(--text-normal);
 }
 
-.helenite-approval-choices {
+.duet-approval-choices {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
 }
 
-.helenite-approval-choices button {
+.duet-approval-choices button {
   display: inline-flex;
   gap: 0.5em;
   align-items: center;
   font-size: var(--font-ui-small);
 }
 
-.helenite-approval-choices button.mod-cta {
-  background: var(--helenite-agent);
+.duet-approval-choices button.mod-cta {
+  background: var(--duet-agent);
   color: white;
 }
 
-.helenite-approval-choices kbd {
+.duet-approval-choices kbd {
   padding: 0 0.35em;
   border: 1px solid currentColor;
   border-radius: 4px;
@@ -696,11 +696,11 @@ button.helenite-send.is-stop svg {
   opacity: 0.6;
 }
 
-.helenite-ended {
+.duet-ended {
   display: none;
 }
 
-.helenite-composer.is-ended .helenite-ended {
+.duet-composer.is-ended .duet-ended {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -715,14 +715,14 @@ button.helenite-send.is-stop svg {
   font-size: var(--font-ui-small);
 }
 
-.helenite-ended button {
+.duet-ended button {
   height: 26px;
   border-radius: 999px;
   font-size: var(--font-ui-smaller);
 }
 
 /* In Live Preview a conversation reads as a chat. The composer shows the model and mode; reading view keeps the properties. */
-.markdown-source-view.helenite-conversation .metadata-container,
-.markdown-source-view.helenite-conversation.show-properties .metadata-container {
+.markdown-source-view.duet-conversation .metadata-container,
+.markdown-source-view.duet-conversation.show-properties .metadata-container {
   display: none !important;
 }

@@ -61,7 +61,7 @@ function submit() {
     <div class="intro">
       <h1>Run a coding agent from your own interface.</h1>
       <p>
-        helenite starts Claude Code or Codex as a background process and shows everything it does here: the reply as it
+        Duet starts Claude Code or Codex as a background process and shows everything it does here: the reply as it
         streams, each tool it uses, and each action it wants your approval for. No terminal is involved.
       </p>
     </div>
@@ -194,8 +194,8 @@ legend,
 }
 
 .harness.selected {
-  border-color: var(--helenite);
-  box-shadow: inset 0 0 0 1px var(--helenite);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .harness:has(input:focus-visible) {
@@ -263,14 +263,14 @@ legend,
 .check input {
   width: 1rem;
   height: 1rem;
-  accent-color: var(--helenite);
+  accent-color: var(--accent);
 }
 
 .link {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--helenite);
+  color: var(--accent);
   font-weight: 550;
   text-decoration: underline;
   text-underline-offset: 3px;

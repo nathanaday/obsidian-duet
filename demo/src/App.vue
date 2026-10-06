@@ -22,7 +22,7 @@ onMounted(() => {
     <header class="top">
       <div class="brand">
         <Gem :active="state.running" />
-        <span class="wordmark">helenite</span>
+        <span class="wordmark">duet</span>
       </div>
       <SessionBar v-if="state.session" v-model:log-open="logOpen" />
     </header>

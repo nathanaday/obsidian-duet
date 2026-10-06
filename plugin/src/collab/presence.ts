@@ -90,11 +90,11 @@ class CaretMarker implements LayerMarker {
 
   draw(): HTMLElement {
     const dom = document.createElement('div');
-    dom.className = 'helenite-caret';
+    dom.className = 'duet-caret';
     const flag = dom.appendChild(document.createElement('div'));
-    flag.className = 'helenite-caret-flag';
-    flag.appendChild(document.createElement('span')).className = 'helenite-caret-name';
-    flag.appendChild(document.createElement('span')).className = 'helenite-caret-status';
+    flag.className = 'duet-caret-flag';
+    flag.appendChild(document.createElement('span')).className = 'duet-caret-name';
+    flag.appendChild(document.createElement('span')).className = 'duet-caret-status';
     this.write(dom);
     return dom;
   }
@@ -120,7 +120,7 @@ class CaretMarker implements LayerMarker {
   private write(dom: HTMLElement): void {
     dom.style.transform = `translate(${this.left}px, ${this.top}px)`;
     dom.style.height = `${this.height}px`;
-    dom.style.setProperty('--helenite-agent', this.state.color);
+    dom.style.setProperty('--duet-agent', this.state.color);
     dom.classList.toggle('is-near-top', this.top < 28);
     dom.classList.toggle('is-near-right', this.left > this.right - 180);
     dom.classList.toggle('has-status', Boolean(this.state.status));
@@ -139,13 +139,13 @@ class TintMarker implements LayerMarker {
 
   draw(): HTMLElement {
     const dom = this.rect.draw();
-    dom.style.setProperty('--helenite-agent', this.color);
+    dom.style.setProperty('--duet-agent', this.color);
     return dom;
   }
 
   update(dom: HTMLElement, previous: LayerMarker): boolean {
     if (!(previous instanceof TintMarker)) return false;
-    dom.style.setProperty('--helenite-agent', this.color);
+    dom.style.setProperty('--duet-agent', this.color);
     return this.rect.update(dom, previous.rect);
   }
 
@@ -156,7 +156,7 @@ class TintMarker implements LayerMarker {
 
 const presenceLayer = layer({
   above: true,
-  class: 'helenite-presence',
+  class: 'duet-presence',
   update: (update) =>
     update.docChanged ||
     update.viewportChanged ||
@@ -168,7 +168,7 @@ const presenceLayer = layer({
     for (const agent of agents(view)) {
       if (agent.anchor !== agent.head) {
         const range = EditorSelection.range(agent.anchor, agent.head);
-        for (const rect of RectangleMarker.forRange(view, 'helenite-agent-selection', range)) {
+        for (const rect of RectangleMarker.forRange(view, 'duet-agent-selection', range)) {
           markers.push(new TintMarker(rect, agent.state.color));
         }
       }
@@ -199,7 +199,7 @@ const edgeIndicator = ViewPlugin.fromClass(
 
     constructor(private readonly view: EditorView) {
       this.dom = view.dom.appendChild(document.createElement('button'));
-      this.dom.className = 'helenite-edge';
+      this.dom.className = 'duet-edge';
       this.dom.addEventListener('mousedown', (event) => {
         event.preventDefault();
         if (this.target !== undefined) view.dispatch({ effects: EditorView.scrollIntoView(this.target, { y: 'center' }) });
@@ -239,7 +239,7 @@ const edgeIndicator = ViewPlugin.fromClass(
           if (!found) return;
           const { state } = found.agent;
           this.dom.dataset.edge = found.edge;
-          this.dom.style.setProperty('--helenite-agent', state.color);
+          this.dom.style.setProperty('--duet-agent', state.color);
           this.dom.textContent = `${state.name} ${state.status ? `· ${state.status}` : 'is editing'} ${found.edge === 'top' ? '↑' : '↓'}`;
         },
       });
@@ -289,8 +289,8 @@ const freshField = StateField.define<DecorationSet>({
 
 function freshMark(spec: FreshSpec, fading: boolean): Decoration {
   return Decoration.mark({
-    class: fading ? 'helenite-fresh is-fading' : 'helenite-fresh',
-    attributes: { style: `--helenite-agent: ${spec.color}` },
+    class: fading ? 'duet-fresh is-fading' : 'duet-fresh',
+    attributes: { style: `--duet-agent: ${spec.color}` },
     fresh: spec,
   });
 }

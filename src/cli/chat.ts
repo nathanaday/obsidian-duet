@@ -77,7 +77,7 @@ async function askPermission(request: PermissionRequest): Promise<PermissionDeci
 
 const base = {
   cwd: values.cwd,
-  clientName: 'agent-helenite-chat',
+  clientName: 'obsidian-duet-chat',
   executablePath: values.exe,
   env,
   model: values.model,

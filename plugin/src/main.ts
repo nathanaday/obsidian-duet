@@ -6,15 +6,15 @@ import { ConversationManager } from './conversation/manager.ts';
 import { enterTrigger } from './enter-trigger.ts';
 import { MentionAgents, type SessionIndex } from './mentions.ts';
 import { PermissionPrompts } from './permission-modal.ts';
-import { displayName, type HeleniteSettings, HeleniteSettingTab, upgradeSettings } from './settings.ts';
+import { displayName, type DuetSettings, DuetSettingTab, upgradeSettings } from './settings.ts';
 
 interface PluginData {
-  settings: HeleniteSettings;
+  settings: DuetSettings;
   sessions: SessionIndex;
 }
 
-export default class HelenitePlugin extends Plugin {
-  settings!: HeleniteSettings;
+export default class DuetPlugin extends Plugin {
+  settings!: DuetSettings;
   hub!: CollabHub;
   mentions!: MentionAgents;
   conversations!: ConversationManager;
@@ -48,7 +48,7 @@ export default class HelenitePlugin extends Plugin {
     });
 
     this.statusEl = this.addStatusBarItem();
-    this.statusEl.addClass('helenite-status');
+    this.statusEl.addClass('duet-status');
     this.statusEl.addEventListener('click', () => {
       const working = this.working()[0];
       if (working) void this.app.workspace.getLeaf(false).openFile(working.file);
@@ -149,7 +149,7 @@ export default class HelenitePlugin extends Plugin {
       },
     });
 
-    this.addSettingTab(new HeleniteSettingTab(this.app, this));
+    this.addSettingTab(new DuetSettingTab(this.app, this));
 
     this.registerEvent(
       this.app.vault.on('rename', (file, oldPath) => {

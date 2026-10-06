@@ -1,6 +1,6 @@
 # Design notes
 
-These notes record the decisions behind agent-helenite and the harness behavior that the code depends on.
+These notes record the decisions behind Duet and the harness behavior that the code depends on.
 
 ## The app starts the harness
 
@@ -9,7 +9,7 @@ There are two ways for an app to talk to an agent:
 1. **Start the harness.** The app starts `claude` or `codex` as a child process and talks to it over stdin and stdout.
 2. **Attach to a running session.** A server inside a terminal session accepts connections from the app. Claude Code calls this "channels". Codex has a shared app-server daemon.
 
-agent-helenite uses the first way:
+Duet uses the first way:
 
 - The user starts the session from the app, so the app needs no connect-and-approve step.
 - Every tool approval comes to the app as a callback. In an attached session, approvals stay in the terminal unless the harness forwards them. Claude Code forwards them only through a preview feature.
@@ -68,7 +68,7 @@ An app that starts from the macOS Dock, such as Obsidian, gets only the system P
 
 ## Bundling for Obsidian
 
-An Obsidian plugin is one CommonJS file. The Claude Agent SDK is ESM and calls `createRequire(import.meta.url)`, which is undefined in CommonJS. `scripts/bundle.mjs` replaces `import.meta.url` with a file URL that a banner line defines. Obsidian does not define `__filename`, so the banner has a fallback. The SDK uses this `require` only to find its own bundled binary, and agent-helenite passes `pathToClaudeCodeExecutable`, so the exact path does not matter. The plugin build must use the same `define` and `banner` settings.
+An Obsidian plugin is one CommonJS file. The Claude Agent SDK is ESM and calls `createRequire(import.meta.url)`, which is undefined in CommonJS. `scripts/bundle.mjs` replaces `import.meta.url` with a file URL that a banner line defines. Obsidian does not define `__filename`, so the banner has a fallback. The SDK uses this `require` only to find its own bundled binary, and Duet passes `pathToClaudeCodeExecutable`, so the exact path does not matter. The plugin build must use the same `define` and `banner` settings.
 
 The bundle is about 900 KB. The SDK, zod and ajv make up most of it.
 
@@ -87,7 +87,7 @@ A session starts Claude Code with the user's settings, plugins and MCP servers, 
 The plugin has two ways to work with an agent:
 
 - **Mentions.** The user writes `@claude` and a request on a line of a note. The agent replies in a callout under the line. It can change only that note.
-- **Conversation notes.** A note with the property `helenite: conversation` is a chat. A message box at the bottom of the note sends messages. The plugin writes the messages, the agent's replies, and its tool calls into the note. When the conversation ends, the note stays as a record.
+- **Conversation notes.** A note with the property `duet: conversation` is a chat. A message box at the bottom of the note sends messages. The plugin writes the messages, the agent's replies, and its tool calls into the note. When the conversation ends, the note stays as a record.
 
 In both modes, every change that an agent makes to an open note appears with the agent's cursor.
 
@@ -151,7 +151,7 @@ In a mention, the agent sees the note with the request line and its reply callou
 A conversation note has this frontmatter:
 
 ```yaml
-helenite: conversation
+duet: conversation
 agent: claude          # the profile name
 model: opus            # optional
 effort: high           # optional
@@ -160,7 +160,7 @@ session: <id>          # the harness session, for resuming
 status: active         # or ended
 created: 2026-10-05 14:02
 cssclasses:
-  - helenite-conversation
+  - duet-conversation
 ```
 
 The body is Markdown:
@@ -195,7 +195,7 @@ On macOS, Obsidian shows menus as native menus by default. Screenshots do not in
 
 ## Licensing and accounts
 
-agent-helenite does not include either harness. It runs the binary that the user installed, with the user's own login. The Claude Agent SDK package is not open source ("All rights reserved", under Anthropic's commercial terms). The plugin bundles the SDK's JavaScript but not its native binary. Anthropic's terms do not let a third-party product offer claude.ai subscription login unless Anthropic approves it. Read the current terms before you publish the plugin.
+Duet does not include either harness. It runs the binary that the user installed, with the user's own login. The Claude Agent SDK package is not open source ("All rights reserved", under Anthropic's commercial terms). The plugin bundles the SDK's JavaScript but not its native binary. Anthropic's terms do not let a third-party product offer claude.ai subscription login unless Anthropic approves it. Read the current terms before you publish the plugin.
 
 ## App tools
 

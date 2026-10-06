@@ -273,7 +273,7 @@ onMounted(() => {
   height: 0.7rem;
   margin-left: 0.5rem;
   clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
-  background: var(--helenite);
+  background: var(--accent);
 }
 
 .resolved.deny .mark,

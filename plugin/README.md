@@ -1,4 +1,4 @@
-# Helenite for Obsidian
+# Duet for Obsidian
 
 Work with Claude Code or Codex inside your notes. You and the agent edit the same note at the same time, and you see the agent's cursor and each change it makes.
 
@@ -30,7 +30,7 @@ npm run plugin:build                                  # builds plugin/dist
 node scripts/plugin.mjs --vault /path/to/your/vault   # copies the plugin into the vault
 ```
 
-In Obsidian, open **Settings → Community plugins**, turn off restricted mode if it is on, and turn on **Helenite**.
+In Obsidian, open **Settings → Community plugins**, turn off restricted mode if it is on, and turn on **Duet**.
 
 To try it in a sandbox first, run `npm run plugin:dev`. It creates `dev-vault/` with sample notes and rebuilds the plugin into it whenever the code changes. Open `dev-vault/` as a vault in Obsidian.
 
@@ -41,22 +41,22 @@ To try it in a sandbox first, run `npm run plugin:dev`. It creates `dev-vault/` 
 - **Ask:** write `@claude` or `@codex`, then your request, and press Enter at the end of the line. The tag can follow other text on the line.
 - **Edit the note:** ask for a change, such as "@claude make the list shorter". The agent changes this note only. It can read other notes, but it cannot change them or run commands that change files, so a mention never asks for approval.
 - **Follow up:** each note keeps its own conversation, so a later `@claude make it shorter` in the same note continues it. The conversation survives an Obsidian restart.
-- **Undo the agent:** run **Helenite: Undo the agent's last changes in this note**. It removes the edits of the agent's last turn and keeps your own typing and the agent's reply. Cmd+Z undoes only your own typing.
-- **Stop:** run **Helenite: Stop the agent in this note**. Assign it a hotkey if you use it often.
-- **Start over:** run **Helenite: Forget the mention conversation in this note**.
+- **Undo the agent:** run **Duet: Undo the agent's last changes in this note**. It removes the edits of the agent's last turn and keeps your own typing and the agent's reply. Cmd+Z undoes only your own typing.
+- **Stop:** run **Duet: Stop the agent in this note**. Assign it a hotkey if you use it often.
+- **Start over:** run **Duet: Forget the mention conversation in this note**.
 
 The plugin ignores tags in code blocks, in blockquotes, and in email addresses.
 
 ### Conversation notes
 
-- **Start:** run **Helenite: New conversation**, or click the ribbon button. With more than one agent, there is a command for each agent. The note goes in the conversation folder (default `Conversations`) and gets its name from your first message.
+- **Start:** run **Duet: New conversation**, or click the ribbon button. With more than one agent, there is a command for each agent. The note goes in the conversation folder (default `Conversations`) and gets its name from your first message.
 - **Send:** type in the message box and press Enter. Shift+Enter starts a new line. A message sent while the agent works waits for the current turn.
 - **Link notes:** type `[[` to pick a note. The agent gets the paths of linked notes and reads them when it needs them.
 - **Commands:** type `/` to see commands. `/model`, `/effort`, `/mode`, `/new` and `/end` are the plugin's. The other commands come from the agent, for example Claude Code's skills.
 - **Model, effort and approvals:** use the buttons under the message box. The choice applies to the next turns and is saved in the note's properties.
 - **Approve:** when the agent wants to change a file or run a command, the request shows above the message box. Press `Y` to allow once, `A` to allow for the rest of the conversation, or `N` to deny.
 - **Stop:** press Escape in the message box, or click the stop button.
-- **End:** type `/end`, or run **Helenite: End this conversation**. The note stays as a record. **Continue it** reopens the conversation.
+- **End:** type `/end`, or run **Duet: End this conversation**. The note stays as a record. **Continue it** reopens the conversation.
 
 In a conversation the agent can change any file in the vault, with the approvals you choose. Its changes to open notes show its cursor, and they merge with text you type at the same time.
 

@@ -78,7 +78,7 @@ export function agentApi(): Plugin {
   let info: Promise<DemoInfo> | undefined;
 
   async function freshSandbox(): Promise<string> {
-    const dir = await mkdtemp(path.join(tmpdir(), 'helenite-demo-'));
+    const dir = await mkdtemp(path.join(tmpdir(), 'duet-demo-'));
     await cp(SAMPLE_VAULT, dir, { recursive: true });
     return dir;
   }
@@ -103,7 +103,7 @@ export function agentApi(): Plugin {
     hosted.session = await createSession({
       harness: request.harness,
       cwd,
-      clientName: 'agent-helenite-demo',
+      clientName: 'obsidian-duet-demo',
       resume: request.resume || undefined,
       onPermission: hosted.askPermission,
       ...harnessOptions(request),
@@ -152,7 +152,7 @@ export function agentApi(): Plugin {
   }
 
   return {
-    name: 'agent-helenite-api',
+    name: 'obsidian-duet-api',
     configureServer(server) {
       server.middlewares.use('/api', (req, res) => {
         route(req, res).catch((error: Error) => json(res, 500, { error: error.message }));

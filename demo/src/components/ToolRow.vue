@@ -61,7 +61,7 @@ summary:hover {
   width: 0.7rem;
   height: 0.7rem;
   border-radius: 50%;
-  border: 1.5px solid var(--helenite);
+  border: 1.5px solid var(--accent);
 }
 
 .running .glyph {
@@ -70,7 +70,7 @@ summary:hover {
 }
 
 .ok .glyph {
-  background: var(--helenite);
+  background: var(--accent);
 }
 
 .failed .glyph {

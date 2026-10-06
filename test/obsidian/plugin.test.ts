@@ -4,9 +4,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { launchObsidian, type ObsidianInstance, openAtEnd } from './harness.ts';
 
 const TIMEOUT = 240_000;
-const SHOTS = process.env.HELENITE_SHOTS;
+const SHOTS = process.env.DUET_SHOTS;
 
-describe('Helenite in Obsidian', () => {
+describe('Duet in Obsidian', () => {
   let obsidian: ObsidianInstance;
 
   beforeAll(async () => {
@@ -21,7 +21,7 @@ describe('Helenite in Obsidian', () => {
     // The editor and the shared document must never differ.
     const drift = await obsidian.page.evaluate(() => {
       const app = (window as any).app;
-      const hub = app.plugins.plugins.helenite?.hub;
+      const hub = app.plugins.plugins.duet?.hub;
       const problems: string[] = [];
       for (const leaf of app.workspace.getLeavesOfType('markdown')) {
         const note = leaf.view.file && hub?.get(leaf.view.file.path);
@@ -38,7 +38,7 @@ describe('Helenite in Obsidian', () => {
   async function idle(timeout = 180_000) {
     await page().waitForFunction(
       () => {
-        const plugin = (window as any).app.plugins.plugins.helenite;
+        const plugin = (window as any).app.plugins.plugins.duet;
         return plugin.mentions.working.length === 0 && plugin.conversations.working.length === 0;
       },
       undefined,
@@ -51,7 +51,7 @@ describe('Helenite in Obsidian', () => {
     await openAtEnd(page(), note);
     await page().keyboard.type(line);
     await page().keyboard.press('Enter');
-    await page().waitForFunction(() => (window as any).app.plugins.plugins.helenite.mentions.working.length > 0, undefined, { timeout: 10_000 });
+    await page().waitForFunction(() => (window as any).app.plugins.plugins.duet.mentions.working.length > 0, undefined, { timeout: 10_000 });
   }
 
   async function shot(name: string) {
@@ -61,8 +61,8 @@ describe('Helenite in Obsidian', () => {
   describe('mentions', () => {
     it('answers a mention in a callout under the line, with a live cursor', { timeout: TIMEOUT }, async () => {
       await mention('Ideas.md', '@claude Reply with exactly the word: pineapple');
-      await page().waitForSelector('.helenite-caret', { timeout: 30_000 });
-      expect(await page().textContent('.helenite-caret-flag')).toContain('Claude');
+      await page().waitForSelector('.duet-caret', { timeout: 30_000 });
+      expect(await page().textContent('.duet-caret-flag')).toContain('Claude');
       await idle();
       const text = await obsidian.waitForNote('Ideas.md', () => true);
       expect(text).toMatch(/@claude Reply with exactly the word: pineapple\n> \[!agent\]\+ Claude\n> pineapple\.?\n\n$/i);
@@ -89,7 +89,7 @@ describe('Helenite in Obsidian', () => {
       const typed = 'I keep typing this sentence while the agent edits the list above.';
       await mention('Ideas.md', '@claude Rewrite each bullet of the list at the top so it is at most eight words. Then reply with: Done.');
       const typing = page().keyboard.type(typed, { delay: 70 });
-      await page().waitForSelector('.helenite-fresh', { timeout: 90_000 });
+      await page().waitForSelector('.duet-fresh', { timeout: 90_000 });
       await shot('edit');
       await typing;
       await idle();
@@ -108,7 +108,7 @@ describe('Helenite in Obsidian', () => {
       await mention('Ideas.md', '@claude Add the line "Reviewed." directly under the "# Ideas" heading. Then reply with: Added.');
       await idle();
       expect(await obsidian.waitForNote('Ideas.md', () => true)).toMatch(/# Ideas\n+Reviewed\./);
-      await page().evaluate(() => (window as any).app.commands.executeCommandById('helenite:revert'));
+      await page().evaluate(() => (window as any).app.commands.executeCommandById('duet:revert'));
       const reverted = await obsidian.waitForNote('Ideas.md', (text) => !/# Ideas\n+Reviewed\./.test(text), 5000);
       // The reply stays; only the edit goes away.
       expect(reverted.startsWith(before.slice(0, before.indexOf('- ')))).toBe(true);
@@ -132,7 +132,7 @@ describe('Helenite in Obsidian', () => {
     it('stops a reply with the Stop command', { timeout: TIMEOUT }, async () => {
       await mention('Ideas.md', '@claude Write a 600 word essay about lighthouses.');
       await obsidian.waitForNote('Ideas.md', (text) => /lighthouses\.\n> \[!agent\]\+ Claude\n> \S/.test(text), 90_000);
-      await page().evaluate(() => (window as any).app.commands.executeCommandById('helenite:stop'));
+      await page().evaluate(() => (window as any).app.commands.executeCommandById('duet:stop'));
       await idle(15_000);
       expect(await obsidian.waitForNote('Ideas.md', () => true)).toMatch(/> \*Stopped\.\*\n\n$/);
     });
@@ -148,12 +148,12 @@ describe('Helenite in Obsidian', () => {
     });
 
     it('remembers the conversation after the plugin reloads', { timeout: TIMEOUT }, async () => {
-      const data = JSON.parse(readFileSync(path.join(obsidian.vault, '.obsidian/plugins/helenite/data.json'), 'utf8'));
+      const data = JSON.parse(readFileSync(path.join(obsidian.vault, '.obsidian/plugins/duet/data.json'), 'utf8'));
       expect(data.sessions['Ideas.md'].claude).toMatch(/^[0-9a-f-]{36}$/);
       await page().evaluate(async () => {
         const plugins = (window as any).app.plugins;
-        await plugins.disablePlugin('helenite');
-        await plugins.enablePlugin('helenite');
+        await plugins.disablePlugin('duet');
+        await plugins.enablePlugin('duet');
       });
       await mention('Ideas.md', '@claude Earlier in this conversation you replied with one fruit word. Which? Reply with only that word, in capitals.');
       await idle();
@@ -163,16 +163,16 @@ describe('Helenite in Obsidian', () => {
   });
 
   describe('conversation notes', () => {
-    async function newConversation(command = 'helenite:new-chat') {
+    async function newConversation(command = 'duet:new-chat') {
       await page().evaluate((id) => (window as any).app.commands.executeCommandById(id), command);
-      await page().waitForSelector('.helenite-composer textarea', { timeout: 15_000 });
+      await page().waitForSelector('.duet-composer textarea', { timeout: 15_000 });
     }
 
     async function send(message: string) {
-      await page().focus('.helenite-composer textarea');
+      await page().focus('.duet-composer textarea');
       await page().keyboard.type(message);
       await page().keyboard.press('Enter');
-      await page().waitForSelector('.helenite-composer.is-working', { timeout: 10_000 });
+      await page().waitForSelector('.duet-composer.is-working', { timeout: 10_000 });
     }
 
     const activePath = () => page().evaluate(() => (window as any).app.workspace.getActiveFile()?.path as string);
@@ -184,7 +184,7 @@ describe('Helenite in Obsidian', () => {
       const file = await activePath();
       expect(file).toMatch(/^Conversations\/\d{4}-\d{2}-\d{2} Read Ideas, then reply with the number/);
       const text = await obsidian.waitForNote(file, () => true);
-      expect(text).toMatch(/^---\nhelenite: conversation\nagent: claude\n/);
+      expect(text).toMatch(/^---\nduet: conversation\nagent: claude\n/);
       expect(text).toMatch(/\nsession: [0-9a-f-]{36}\n/);
       expect(text).toContain('> [!user]\n> Read [[Ideas]], then reply');
       expect(text).toMatch(/> \[!activity\]- .*Read a file.*\n> - Read \[\[Ideas\]\]/);
@@ -203,8 +203,8 @@ describe('Helenite in Obsidian', () => {
         app.workspace.setActiveLeaf(chatLeaf, { focus: true });
       });
       await send('Use your Edit tool to replace the first line of [[Reading list]] with "# Books". Then reply with: Done.');
-      await page().waitForSelector('.helenite-composer.has-approval', { timeout: 90_000 });
-      expect(await page().textContent('.helenite-approval')).toContain('Claude wants to change a file');
+      await page().waitForSelector('.duet-composer.has-approval', { timeout: 90_000 });
+      expect(await page().textContent('.duet-approval')).toContain('Claude wants to change a file');
       await shot('approval');
       // Type in the open note while the agent waits for approval and then edits it.
       const typed = ' Typed while the agent edits.';
@@ -220,7 +220,7 @@ describe('Helenite in Obsidian', () => {
         const app = (window as any).app;
         app.workspace.setActiveLeaf(app.workspace.getLeavesOfType('markdown').find((l: any) => l.view.file?.path === file), { focus: true });
       }, chat);
-      await page().focus('.helenite-composer textarea');
+      await page().focus('.duet-composer textarea');
       await page().keyboard.press('y');
       await idle();
       const list = await obsidian.waitForNote('Reading list.md', () => true);
@@ -237,21 +237,21 @@ describe('Helenite in Obsidian', () => {
         const app = (window as any).app;
         app.workspace.setActiveLeaf(app.workspace.getLeavesOfType('markdown').find((l: any) => l.view.file?.path === file), { focus: true });
       }, chat);
-      await page().focus('.helenite-composer textarea');
+      await page().focus('.duet-composer textarea');
       await page().keyboard.type('/end');
       await page().keyboard.press('Escape');
       await page().keyboard.press('Enter');
-      await page().waitForSelector('.helenite-composer.is-ended', { timeout: 10_000 });
+      await page().waitForSelector('.duet-composer.is-ended', { timeout: 10_000 });
       expect(await obsidian.waitForNote(chat, (text) => text.includes('status: ended'), 5000)).toContain('status: ended');
       await shot('ended');
     });
 
     it('talks to Codex in a Codex conversation', { timeout: TIMEOUT }, async () => {
-      await newConversation('helenite:new-chat-codex');
+      await newConversation('duet:new-chat-codex');
       await send('Reply with exactly the word: kiwi');
       await idle();
       const text = await obsidian.waitForNote(await activePath(), () => true);
-      expect(text).toMatch(/^---\nhelenite: conversation\nagent: codex\n/);
+      expect(text).toMatch(/^---\nduet: conversation\nagent: codex\n/);
       expect(text).toMatch(/\nkiwi\.?\n\n$/i);
     });
   });

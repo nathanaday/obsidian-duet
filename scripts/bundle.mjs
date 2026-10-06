@@ -2,4 +2,4 @@
 import { build } from 'esbuild';
 import { obsidianBundle } from './esbuild-options.mjs';
 
-await build({ ...obsidianBundle, entryPoints: ['src/index.ts'], outfile: 'dist/agent-helenite.cjs', logLevel: 'info' });
+await build({ ...obsidianBundle, entryPoints: ['src/index.ts'], outfile: 'dist/obsidian-duet.cjs', logLevel: 'info' });

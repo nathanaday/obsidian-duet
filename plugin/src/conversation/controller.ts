@@ -17,7 +17,7 @@ import { type AgentProfile, displayName } from '../settings.ts';
 import { frontmatterEdit, renderTurn, titleFrom, userBlock } from './format.ts';
 import { TurnTranscript } from './transcript.ts';
 
-const INSTRUCTIONS = `You are running inside Obsidian, the note-taking app, through the Helenite plugin. Your working directory is the root of the user's vault.
+const INSTRUCTIONS = `You are running inside Obsidian, the note-taking app, through the Duet plugin. Your working directory is the root of the user's vault.
 
 This conversation happens in a note, the conversation note. The plugin writes the user's messages and your replies into it as the conversation goes, so the note is the record of the conversation. Messages give its path.
 
