@@ -16,7 +16,7 @@ Duet uses your own Claude Code or Codex installation and login. It does not need
 
 ### Prerequisites
 
-- Obsidian 1.8.7 or later, on desktop. Duet is tested on macOS.
+- Obsidian 1.13 or later, on desktop. Duet is tested on macOS.
 - Claude Code (`claude`) or the Codex CLI (`codex`), installed and logged in. Check this in a terminal: `claude --version` or `codex --version`.
 
 ### Install
@@ -118,6 +118,7 @@ Duet does not connect to the internet. It starts Claude Code or Codex on your co
 - **Accounts and payment:** Duet is free. Claude Code and Codex each need an account with their provider. Their use can cost money under that account's plan.
 - **Files in the vault:** Duet saves its contribution record in the hidden folder `.duet/contributions/`. Each file holds the positions of the agent's text and a copy of the note's text. Duet uses the copy to follow changes that it did not see.
 - **Files outside the vault:** Duet runs programs that are installed outside the vault: `claude` or `codex`, and your login shell, once after Obsidian starts, to read its PATH. Claude Code and Codex save their conversation history in their own folders, such as `~/.claude` and `~/.codex`. The agents work in the vault folder. Their own permission rules control access to other files, and Duet shows you each approval request that they send.
+- **Your environment:** to find and start Claude Code and Codex, Duet reads your environment variables and your home folder. It passes your environment to the agent programs, as a terminal does. Duet does not send this information anywhere.
 - **Telemetry:** Duet collects no data. Claude Code and Codex follow the privacy policies of Anthropic and OpenAI.
 
 ## Development

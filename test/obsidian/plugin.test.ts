@@ -301,4 +301,37 @@ describe('Duet in Obsidian', () => {
       expect(text).toMatch(/\nkiwi\.?\n\n$/i);
     });
   });
+
+  describe('settings', () => {
+    const tags = () => page().evaluate(() => (window as any).app.plugins.plugins.duet.settings.profiles.map((p: { name: string }) => p.name) as string[]);
+
+    it('adds, renames and removes an agent in the settings window', { timeout: TIMEOUT }, async () => {
+      // Obsidian opens its settings in a separate window.
+      const opened = page().context().waitForEvent('page', { timeout: 10_000 });
+      await page().evaluate(() => {
+        const setting = (window as any).app.setting;
+        setting.open();
+        setting.openTabById('duet');
+      });
+      const win = await opened;
+      try {
+        await win.getByText('Add agent', { exact: true }).click();
+        await expect.poll(tags).toEqual(['claude', 'codex', 'agent2']);
+
+        // Typing a tag keeps the focus. The heading follows when the field loses it.
+        const tag = win.locator('.setting-item:has(.setting-item-name:text-is("Tag")) input').nth(2);
+        await tag.click();
+        await tag.press('Meta+a');
+        await win.keyboard.type('work', { delay: 60 });
+        await expect.poll(tags).toEqual(['claude', 'codex', 'work']);
+        await win.keyboard.press('Tab');
+        await win.getByText('@work', { exact: true }).waitFor({ timeout: 5000 });
+
+        await win.locator('[aria-label="Remove @work"]').click();
+        await expect.poll(tags).toEqual(['claude', 'codex']);
+      } finally {
+        await page().evaluate(() => (window as any).app.setting.close());
+      }
+    });
+  });
 });

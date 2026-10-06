@@ -33,7 +33,7 @@ const { values } = parseArgs({
 });
 
 if (values.help || (values.harness !== 'claude' && values.harness !== 'codex')) {
-  console.log(USAGE);
+  process.stdout.write(`${USAGE}\n`);
   process.exit(values.help ? 0 : 1);
 }
 
@@ -96,7 +96,7 @@ const options: CreateSessionOptions =
 
 process.stdout.write(dim(`Starting ${values.harness} in ${values.cwd} ...\n`));
 const session = await createSession(options);
-console.log(dim(`Session ${session.id}. Resume it with --harness ${session.harness} --resume ${session.id}\n`));
+process.stdout.write(`${dim(`Session ${session.id}. Resume it with --harness ${session.harness} --resume ${session.id}\n`)}\n`);
 
 let streamed = false;
 session.on((event) => {
@@ -116,7 +116,7 @@ session.on((event) => {
       if (!event.ok) process.stdout.write(styleText('red', `  x failed${event.output ? `: ${firstLine(event.output)}` : ''}\n`));
       break;
     case 'closed':
-      if (event.error) console.error(styleText('red', `\nSession closed: ${event.error}`));
+      if (event.error) process.stderr.write(`${styleText('red', `\nSession closed: ${event.error}`)}\n`);
       break;
   }
 });
@@ -147,9 +147,9 @@ while (!session.closed) {
     turnRunning = false;
   });
   if (result.status !== 'completed') {
-    console.log(styleText(result.status === 'failed' ? 'red' : 'yellow', `[${result.status}]${result.error ? ` ${result.error}` : ''}`));
+    process.stdout.write(`${styleText(result.status === 'failed' ? 'red' : 'yellow', `[${result.status}]${result.error ? ` ${result.error}` : ''}`)}\n`);
   }
-  console.log();
+  process.stdout.write('\n');
 }
 await quit();
 

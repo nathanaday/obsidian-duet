@@ -1,4 +1,4 @@
-import { type App, PluginSettingTab, Setting } from 'obsidian';
+import { type App, PluginSettingTab, type SettingDefinitionGroup, type SettingDefinitionItem } from 'obsidian';
 import type { ApprovalSetting, Harness } from '../../src/index.ts';
 import type DuetPlugin from './main.ts';
 
@@ -79,7 +79,14 @@ export function displayName(profile: AgentProfile): string {
   return profile.name.charAt(0).toUpperCase() + profile.name.slice(1);
 }
 
+type AgentField = keyof AgentProfile;
+
+/** Settings controls of an agent use the key `agent.<index>.<field>`. */
+const agentKey = (index: number, field: AgentField) => `agent.${index}.${field}`;
+
 export class DuetSettingTab extends PluginSettingTab {
+  private readonly waitingForBlur = new WeakSet<HTMLInputElement>();
+
   constructor(
     app: App,
     private readonly plugin: DuetPlugin,
@@ -87,181 +94,186 @@ export class DuetSettingTab extends PluginSettingTab {
     super(app, plugin);
   }
 
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    const { profiles } = this.plugin.settings;
+    return [
+      {
+        name: 'Ask an agent',
+        desc: 'Write @name followed by a request on a line of a note, then press Enter. The agent replies in a callout under the line and can edit that note while you keep typing. For a longer exchange, start a conversation note from the command palette.',
+      },
+      {
+        name: 'Conversation folder',
+        desc: 'Where new conversation notes go.',
+        control: { type: 'folder', key: 'conversationFolder', placeholder: 'Conversations', includeRoot: true },
+      },
+      {
+        name: 'Show agents typing',
+        desc: 'Agents type their edits into open notes, with a live cursor. Off: edits appear at once, and the cursor still shows where the agent works.',
+        control: { type: 'toggle', key: 'animate' },
+      },
+      {
+        name: 'Close idle agents after',
+        desc: 'Minutes without activity before an agent process stops. The next message continues the same conversation.',
+        control: {
+          type: 'number',
+          key: 'idleMinutes',
+          min: 1,
+          validate: (minutes) => (Number.isFinite(minutes) && minutes > 0 ? undefined : 'Enter a number of minutes greater than 0.'),
+        },
+      },
+      ...profiles.map((profile, index) => this.agentGroup(profile, index)),
+      {
+        name: 'Add agent',
+        desc: 'Another agent with its own tag and settings, for example a second Claude account.',
+        action: () => void this.addAgent(),
+      },
+    ];
+  }
 
-    containerEl.createEl('p', {
-      cls: 'duet-settings-intro',
-      text: 'Write @name followed by a request on a line of a note, then press Enter. The agent replies in a callout under the line and can edit that note while you keep typing. For a longer exchange, start a conversation note from the command palette.',
-    });
+  getControlValue(key: string): unknown {
+    const agent = parseAgentKey(key);
+    if (agent) return this.plugin.settings.profiles[agent.index]?.[agent.field];
+    return this.plugin.settings[key as keyof DuetSettings];
+  }
 
-    new Setting(containerEl)
-      .setName('Conversation folder')
-      .setDesc('Where new conversation notes go.')
-      .addText((text) =>
-        text.setValue(this.plugin.settings.conversationFolder).onChange(async (value) => {
-          this.plugin.settings.conversationFolder = value.trim().replace(/^\/+|\/+$/g, '');
-          await this.plugin.saveSettings();
-        }),
-      );
+  async setControlValue(key: string, value: unknown): Promise<void> {
+    const { settings } = this.plugin;
+    const agent = parseAgentKey(key);
+    if (!agent) {
+      if (key === 'conversationFolder') settings.conversationFolder = String(value).trim().replace(/^\/+|\/+$/g, '');
+      else if (key === 'animate') settings.animate = Boolean(value);
+      else if (key === 'idleMinutes') settings.idleMinutes = Number(value);
+      await this.plugin.saveSettings();
+      return;
+    }
+    const profile = settings.profiles[agent.index];
+    if (!profile) return;
+    switch (agent.field) {
+      case 'name':
+        profile.name = String(value).trim().replace(/^@/, '');
+        break;
+      case 'harness':
+        profile.harness = value as Harness;
+        if (!APPROVALS[profile.harness][profile.approval]) profile.approval = 'ask';
+        break;
+      case 'approval':
+        profile.approval = value as ApprovalSetting;
+        break;
+      case 'effort':
+        profile.effort = String(value).trim().toLowerCase();
+        break;
+      case 'model':
+      case 'executablePath':
+        profile[agent.field] = String(value).trim();
+        break;
+      case 'env':
+      case 'color':
+        profile[agent.field] = String(value);
+        break;
+      case 'userTools':
+        profile.userTools = Boolean(value);
+        break;
+    }
+    await this.plugin.saveSettings();
+    // The heading shows the tag, and the program decides which approvals and options the agent offers.
+    if (agent.field === 'harness') this.update();
+    if (agent.field === 'name') this.updateAfterTyping();
+  }
 
-    new Setting(containerEl)
-      .setName('Show agents typing')
-      .setDesc('Agents type their edits into open notes, with a live cursor. Off: edits appear at once, and the cursor still shows where the agent works.')
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.animate).onChange(async (value) => {
-          this.plugin.settings.animate = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName('Close idle agents after')
-      .setDesc('Minutes without activity before an agent process stops. The next message continues the same conversation.')
-      .addText((text) =>
-        text.setValue(String(this.plugin.settings.idleMinutes)).onChange(async (value) => {
-          const minutes = Number(value);
-          if (Number.isFinite(minutes) && minutes > 0) {
-            this.plugin.settings.idleMinutes = minutes;
-            await this.plugin.saveSettings();
-          }
-        }),
-      );
-
-    new Setting(containerEl).setName('Agents').setHeading();
-
-    this.plugin.settings.profiles.forEach((profile, index) => this.displayProfile(containerEl, profile, index));
-
-    new Setting(containerEl).addButton((button) =>
-      button.setButtonText('Add agent').onClick(async () => {
-        this.plugin.settings.profiles.push({ ...DEFAULT_SETTINGS.profiles[0]!, name: this.unusedName() });
-        await this.plugin.saveSettings();
-        this.display();
-      }),
+  /** Refreshes the tab when the field that has focus loses it. A refresh while the user types would take the focus. */
+  private updateAfterTyping(): void {
+    const field = this.containerEl.doc.activeElement;
+    if (!field?.instanceOf(HTMLInputElement)) {
+      this.update();
+      return;
+    }
+    if (this.waitingForBlur.has(field)) return;
+    this.waitingForBlur.add(field);
+    field.addEventListener(
+      'blur',
+      () => {
+        this.waitingForBlur.delete(field);
+        this.update();
+      },
+      { once: true },
     );
   }
 
-  private displayProfile(containerEl: HTMLElement, profile: AgentProfile, index: number): void {
-    const group = containerEl.createDiv({ cls: 'duet-profile' });
-    const save = () => this.plugin.saveSettings();
+  private agentGroup(profile: AgentProfile, index: number): SettingDefinitionGroup {
+    return {
+      type: 'group',
+      heading: `@${profile.name}`,
+      extraButtons: [
+        (button) =>
+          button
+            .setIcon('trash')
+            .setTooltip(`Remove @${profile.name}`)
+            .onClick(() => void this.removeAgent(index)),
+      ],
+      items: [
+        {
+          name: 'Tag',
+          desc: 'The name you write after @. Letters, digits, - and _.',
+          control: {
+            type: 'text',
+            key: agentKey(index, 'name'),
+            validate: (value) => {
+              const name = value.trim().replace(/^@/, '');
+              if (!/^[\w-]+$/.test(name)) return 'Use only letters, digits, - and _.';
+              if (this.nameTaken(name, index)) return `Another agent already has the tag @${name}.`;
+            },
+          },
+        },
+        { name: 'Color', desc: "The agent's cursor and highlights.", control: { type: 'color', key: agentKey(index, 'color') } },
+        { name: 'Agent', control: { type: 'dropdown', key: agentKey(index, 'harness'), options: HARNESS_NAMES } },
+        {
+          name: 'Approvals',
+          desc: 'For conversation notes. In a mention, the agent can change only the note it was asked in, without asking.',
+          control: { type: 'dropdown', key: agentKey(index, 'approval'), options: APPROVALS[profile.harness] },
+        },
+        {
+          name: 'Model',
+          desc: 'Leave empty for the default model. A conversation note can choose its own.',
+          control: { type: 'text', key: agentKey(index, 'model') },
+        },
+        {
+          name: 'Effort',
+          desc: 'How much the model reasons, for example low, medium or high. Leave empty for the default.',
+          control: { type: 'text', key: agentKey(index, 'effort') },
+        },
+        {
+          name: 'Program path',
+          desc: `Leave empty to find ${profile.harness} on your shell's PATH.`,
+          control: { type: 'text', key: agentKey(index, 'executablePath'), placeholder: `/usr/local/bin/${profile.harness}` },
+        },
+        {
+          name: 'Environment variables',
+          desc:
+            profile.harness === 'claude'
+              ? 'One KEY=VALUE per line. For example, CLAUDE_CONFIG_DIR=~/.claude-work uses a second Claude account.'
+              : 'One KEY=VALUE per line. For example, CODEX_HOME=~/.codex-work uses a second Codex account.',
+          control: { type: 'textarea', key: agentKey(index, 'env'), rows: 3 },
+        },
+        {
+          name: 'Load my MCP servers and plugins',
+          desc: 'Off: the agent uses only its built-in tools.',
+          visible: () => this.plugin.settings.profiles[index]?.harness === 'claude',
+          control: { type: 'toggle', key: agentKey(index, 'userTools') },
+        },
+      ],
+    };
+  }
 
-    new Setting(group)
-      .setName(`@${profile.name}`)
-      .setDesc(HARNESS_NAMES[profile.harness])
-      .setClass('duet-profile-title')
-      .addExtraButton((button) =>
-        button
-          .setIcon('trash')
-          .setTooltip(`Remove @${profile.name}`)
-          .onClick(async () => {
-            this.plugin.settings.profiles.splice(index, 1);
-            await save();
-            this.display();
-          }),
-      );
+  private async addAgent(): Promise<void> {
+    this.plugin.settings.profiles.push({ ...DEFAULT_SETTINGS.profiles[0]!, name: this.unusedName() });
+    await this.plugin.saveSettings();
+    this.update();
+  }
 
-    new Setting(group)
-      .setName('Tag')
-      .setDesc('The name you write after @. Letters, digits, - and _.')
-      .addText((text) =>
-        text.setValue(profile.name).onChange(async (value) => {
-          const name = value.trim().replace(/^@/, '');
-          if (!/^[\w-]+$/.test(name) || this.nameTaken(name, index)) return;
-          profile.name = name;
-          await save();
-        }),
-      );
-
-    new Setting(group)
-      .setName('Color')
-      .setDesc("The agent's cursor and highlights.")
-      .addColorPicker((picker) =>
-        picker.setValue(profile.color).onChange(async (value) => {
-          profile.color = value;
-          await save();
-        }),
-      );
-
-    new Setting(group).setName('Agent').addDropdown((dropdown) =>
-      dropdown
-        .addOptions(HARNESS_NAMES)
-        .setValue(profile.harness)
-        .onChange(async (value) => {
-          profile.harness = value as Harness;
-          if (!APPROVALS[profile.harness][profile.approval]) profile.approval = 'ask';
-          await save();
-          this.display();
-        }),
-    );
-
-    new Setting(group)
-      .setName('Approvals')
-      .setDesc('For conversation notes. In a mention, the agent can change only the note it was asked in, without asking.')
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOptions(APPROVALS[profile.harness])
-          .setValue(profile.approval)
-          .onChange(async (value) => {
-            profile.approval = value as ApprovalSetting;
-            await save();
-          }),
-      );
-
-    new Setting(group)
-      .setName('Model')
-      .setDesc('Leave empty for the default model. A conversation note can choose its own.')
-      .addText((text) =>
-        text.setValue(profile.model).onChange(async (value) => {
-          profile.model = value.trim();
-          await save();
-        }),
-      );
-
-    new Setting(group)
-      .setName('Effort')
-      .setDesc('How much the model reasons, for example low, medium or high. Leave empty for the default.')
-      .addText((text) =>
-        text.setValue(profile.effort).onChange(async (value) => {
-          profile.effort = value.trim().toLowerCase();
-          await save();
-        }),
-      );
-
-    new Setting(group)
-      .setName('Program path')
-      .setDesc(`Leave empty to find ${profile.harness} on your shell's PATH.`)
-      .addText((text) =>
-        text
-          .setPlaceholder(`/usr/local/bin/${profile.harness}`)
-          .setValue(profile.executablePath)
-          .onChange(async (value) => {
-            profile.executablePath = value.trim();
-            await save();
-          }),
-      );
-
-    new Setting(group)
-      .setName('Environment variables')
-      .setDesc('One KEY=VALUE per line. For example, CLAUDE_CONFIG_DIR=~/.claude-work uses a second Claude account.')
-      .addTextArea((text) =>
-        text.setValue(profile.env).onChange(async (value) => {
-          profile.env = value;
-          await save();
-        }),
-      );
-
-    if (profile.harness === 'claude') {
-      new Setting(group)
-        .setName('Load my MCP servers and plugins')
-        .setDesc('Off: the agent uses only its built-in tools.')
-        .addToggle((toggle) =>
-          toggle.setValue(profile.userTools).onChange(async (value) => {
-            profile.userTools = value;
-            await save();
-          }),
-        );
-    }
+  private async removeAgent(index: number): Promise<void> {
+    this.plugin.settings.profiles.splice(index, 1);
+    await this.plugin.saveSettings();
+    this.update();
   }
 
   private nameTaken(name: string, except: number): boolean {
@@ -273,4 +285,9 @@ export class DuetSettingTab extends PluginSettingTab {
   private unusedName(): string {
     for (let n = 2; ; n++) if (!this.nameTaken(`agent${n}`, -1)) return `agent${n}`;
   }
+}
+
+function parseAgentKey(key: string): { index: number; field: AgentField } | undefined {
+  const match = /^agent\.(\d+)\.(\w+)$/.exec(key);
+  return match ? { index: Number(match[1]), field: match[2] as AgentField } : undefined;
 }

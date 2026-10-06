@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { clearTimeout, setTimeout } from 'node:timers';
 import { z } from 'zod';
 import { findExecutable, harnessEnvironment, pathDisplay } from '../../environment.ts';
 import {

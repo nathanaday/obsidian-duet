@@ -70,7 +70,9 @@ An app that starts from the macOS Dock, such as Obsidian, gets only the system P
 
 An Obsidian plugin is one CommonJS file. The Claude Agent SDK is ESM and calls `createRequire(import.meta.url)`, which is undefined in CommonJS. `scripts/bundle.mjs` replaces `import.meta.url` with a file URL that a banner line defines. Obsidian does not define `__filename`, so the banner has a fallback. The SDK uses this `require` only to find its own bundled binary, and Duet passes `pathToClaudeCodeExecutable`, so the exact path does not matter. The plugin build must use the same `define` and `banner` settings.
 
-The bundle is about 900 KB. The SDK, zod and ajv make up most of it.
+The plugin bundle is about 2 MB and is not minified, so reviewers can read it. The Claude Agent SDK and zod make up most of it.
+
+The MCP SDK, which the Claude Agent SDK uses for in-process tools, validates JSON Schemas with ajv by default. ajv compiles each schema to JavaScript with `new Function`, and Obsidian's review flags code that generates code. The plugin build points the MCP SDK's ajv validator at `scripts/shims/mcp-validator.mjs`, which exports the SDK's own `CfWorkerJsonSchemaValidator`. That validator interprets schemas. The library package keeps the default, because only the plugin is reviewed.
 
 Obsidian plugins that start processes work only on desktop. The plugin manifest must set `isDesktopOnly: true`.
 
@@ -209,6 +211,10 @@ The ledger records which text of each note a Duet agent wrote. The contribution 
 
 **The lens.** In the editor, agent text has a mark with a tooltip that names the agent and the date. Live Preview renders some blocks, such as callouts and tables, as widgets, and a mark inside a widget does not show. A widget that holds agent text gets a bar on its left edge instead. Reading view has no source positions in its rendered text, so it marks whole sections.
 
+### Settings
+
+The settings tab uses the declarative settings API of Obsidian 1.13, so each setting shows in the settings search. Each agent is a group on the main page, with its tag as the heading and a remove button. Pages would hide the remove action: a list of pages has no visible delete button, and Obsidian finds an open page by its name, so renaming an agent while its page is open would empty the page. A tag change refreshes the tab when the field loses focus, because a refresh takes the focus from the field.
+
 ### Node's events module in Electron
 
 In Obsidian's renderer, `AbortController` is the browser's. The Claude Agent SDK calls `events.setMaxListeners(n, signal)`, and Node rejects a browser `AbortSignal`. The bundle maps `events` to `scripts/shims/node-events.cjs`, which forwards everything to Node's module except that `setMaxListeners` skips browser event targets. The plugin does not patch the global module, so other plugins are not affected.
@@ -216,6 +222,8 @@ In Obsidian's renderer, `AbortController` is the browser's. The Claude Agent SDK
 ### Testing in a separate Obsidian
 
 `test/obsidian/harness.ts` starts Obsidian with `--user-data-dir` set to a temporary profile and `--remote-debugging-port`, so it runs beside the user's own Obsidian and does not share its settings or vaults. Playwright connects over the Chrome DevTools Protocol and types into the editor as a user does. The harness enables the plugin once with `enablePluginAndSave`. If the plugin is also listed in `community-plugins.json`, turning on community plugins loads a second instance. After each test, the suite checks that every open shared note has the same text in the editor and in the document.
+
+A new profile has no app update, so Obsidian would run the version that its installer contains, which can be older than the plugin's `minAppVersion`. The harness copies the newest `obsidian-<version>.asar` from Obsidian's own data folder into the test profile, so the tests run the version that the user runs. Obsidian ignores a symbolic link there. In Obsidian 1.14, the settings open in a separate window; a test that uses the settings waits for that window.
 
 On macOS, Obsidian shows menus as native menus by default. Screenshots do not include them.
 

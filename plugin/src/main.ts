@@ -18,7 +18,7 @@ interface PluginData {
 }
 
 export default class DuetPlugin extends Plugin {
-  settings!: DuetSettings;
+  declare settings: DuetSettings;
   hub!: CollabHub;
   mentions!: MentionAgents;
   conversations!: ConversationManager;

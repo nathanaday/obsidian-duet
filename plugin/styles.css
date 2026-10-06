@@ -72,22 +72,6 @@
   color: var(--color-cyan);
 }
 
-.duet-settings-intro {
-  color: var(--text-muted);
-}
-
-.duet-profile {
-  margin-bottom: var(--size-4-4);
-  padding: 0 var(--size-4-3);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-}
-
-.duet-profile-title .setting-item-name {
-  font-family: var(--font-monospace);
-  font-weight: var(--font-semibold);
-}
-
 .modal.duet-permission {
   --duet-glass-text: #eaf6f0;
   width: min(36rem, 92vw);

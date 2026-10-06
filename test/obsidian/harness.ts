@@ -1,11 +1,13 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { type Browser, chromium, type Page } from 'playwright-core';
 
 const OBSIDIAN = process.env.OBSIDIAN_BINARY ?? '/Applications/Obsidian.app/Contents/MacOS/Obsidian';
+/** Obsidian's own data folder, where it keeps the app updates that it downloaded. */
+const OBSIDIAN_DATA = process.env.OBSIDIAN_DATA ?? path.join(homedir(), 'Library/Application Support/obsidian');
 
 export interface ObsidianInstance {
   page: Page;
@@ -38,6 +40,7 @@ export async function launchObsidian({ vault: source = 'test/fixtures/sample-vau
   for (const file of ['main.js', 'manifest.json', 'styles.css']) await cp(path.join('plugin/dist', file), path.join(pluginDir, file));
   if (pluginData) await writeFile(path.join(pluginDir, 'data.json'), JSON.stringify(pluginData));
   await mkdir(profile);
+  await linkAppUpdate(profile);
   await writeFile(
     path.join(profile, 'obsidian.json'),
     JSON.stringify({ vaults: { duettest00001: { path: vault, ts: Date.now(), open: true } } }),
@@ -97,6 +100,21 @@ export async function launchObsidian({ vault: source = 'test/fixtures/sample-vau
     await stop(child);
     throw error;
   }
+}
+
+/**
+ * Obsidian runs the newest app update in its profile folder. A new profile has none, so it would run the
+ * installer's older version. A copy of the installed update makes the test run the version that the user runs.
+ */
+async function linkAppUpdate(profile: string): Promise<void> {
+  const updates = (await readdir(OBSIDIAN_DATA).catch(() => [] as string[])).filter((name) => /^obsidian-[\d.]+\.asar$/.test(name));
+  const version = (name: string) => name.slice('obsidian-'.length, -'.asar'.length).split('.').map(Number);
+  const newest = updates.sort((a, b) => {
+    const [x, y] = [version(a), version(b)];
+    for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+    return 0;
+  }).at(-1);
+  if (newest) await copyFile(path.join(OBSIDIAN_DATA, newest), path.join(profile, newest));
 }
 
 /** Opens a note and puts the cursor at the end of a new last line. */
