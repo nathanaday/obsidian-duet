@@ -179,7 +179,7 @@ function occurrences(text: string, search: string): number[] {
 
 function textOf(note: SharedNote, snapshot: Y.Snapshot): string {
   const fork = note.fork(snapshot);
-  const text = fork.getText('content').toString();
+  const text = fork.getText('content').toJSON();
   fork.destroy();
   return text;
 }

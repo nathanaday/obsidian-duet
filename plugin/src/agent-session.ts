@@ -34,26 +34,25 @@ export function vaultRoot(app: App): string {
 /** Starts a harness session for a profile. When the stored conversation is gone, starts a new one. */
 export async function startAgent(app: App, options: StartOptions): Promise<AgentSession> {
   const { profile } = options;
-  const build = (resume?: string): CreateSessionOptions =>
-    ({
-      harness: profile.harness,
-      cwd: vaultRoot(app),
-      clientName: 'obsidian-duet',
-      executablePath: profile.executablePath || undefined,
-      env: {
-        ...(profile.harness === 'claude' && { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' }),
-        ...parseEnv(profile.env),
-      },
-      model: options.model || profile.model || undefined,
-      effort: options.effort || profile.effort || undefined,
-      instructions: options.instructions,
-      resume,
-      tools: options.tools,
-      access: options.access,
-      onPermission: options.onPermission,
-      ...approvalOptions(profile.harness, options.approval ?? profile.approval),
-      ...(profile.harness === 'claude' && { sdkOptions: { strictMcpConfig: !profile.userTools } }),
-    }) as CreateSessionOptions;
+  const build = (resume?: string): CreateSessionOptions => ({
+    harness: profile.harness,
+    cwd: vaultRoot(app),
+    clientName: 'obsidian-duet',
+    executablePath: profile.executablePath || undefined,
+    env: {
+      ...(profile.harness === 'claude' && { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' }),
+      ...parseEnv(profile.env),
+    },
+    model: options.model || profile.model || undefined,
+    effort: options.effort || profile.effort || undefined,
+    instructions: options.instructions,
+    resume,
+    tools: options.tools,
+    access: options.access,
+    onPermission: options.onPermission,
+    ...approvalOptions(profile.harness, options.approval ?? profile.approval),
+    ...(profile.harness === 'claude' && { sdkOptions: { strictMcpConfig: !profile.userTools } }),
+  });
   if (!options.resume) return createSession(build());
   try {
     return await createSession(build(options.resume));

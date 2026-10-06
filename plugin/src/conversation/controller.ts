@@ -104,8 +104,14 @@ export class ConversationController {
     return { ...this.app.metadataCache.getFileCache(this.file)?.frontmatter, ...this.written };
   }
 
+  /** A text property of the note. Undefined when it is missing or not text. */
+  private property(key: string): string | undefined {
+    const value = this.properties[key];
+    return typeof value === 'string' ? value : undefined;
+  }
+
   get profile(): AgentProfile {
-    const name = String(this.properties.agent ?? '').toLowerCase();
+    const name = this.property('agent')?.toLowerCase();
     const profiles = this.profiles();
     return profiles.find((profile) => profile.name.toLowerCase() === name) ?? profiles[0]!;
   }
@@ -119,15 +125,15 @@ export class ConversationController {
   }
 
   get model(): string | undefined {
-    return (this.properties.model as string | undefined) || this.profile.model || undefined;
+    return this.property('model') || this.profile.model || undefined;
   }
 
   get effort(): string | undefined {
-    return (this.properties.effort as string | undefined) || this.profile.effort || undefined;
+    return this.property('effort') || this.profile.effort || undefined;
   }
 
   get approval(): ApprovalSetting {
-    return (this.properties.approval as ApprovalSetting | undefined) ?? this.profile.approval;
+    return (this.property('approval') as ApprovalSetting | undefined) ?? this.profile.approval;
   }
 
   get working(): boolean {
@@ -349,9 +355,9 @@ export class ConversationController {
       profile: this.profile,
       instructions: INSTRUCTIONS,
       access: 'workspace',
-      resume: this.properties.session as string | undefined,
-      model: this.properties.model as string | undefined,
-      effort: this.properties.effort as string | undefined,
+      resume: this.property('session'),
+      model: this.property('model'),
+      effort: this.property('effort'),
       approval: this.approval,
       onPermission: (request) => this.ask(request),
     })

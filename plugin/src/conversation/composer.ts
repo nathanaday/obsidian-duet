@@ -259,8 +259,8 @@ export class Composer {
   }
 
   private autosize(): void {
-    this.input.style.height = 'auto';
-    this.input.style.height = `${Math.min(this.input.scrollHeight, 220)}px`;
+    this.input.setCssProps({ '--duet-input-height': 'auto' });
+    this.input.setCssProps({ '--duet-input-height': `${this.input.scrollHeight}px` });
   }
 
   private updateSuggestions(): void {
@@ -397,7 +397,7 @@ export class Composer {
     let frame: number | undefined;
     const observer = new MutationObserver(() => {
       if (!this.follow || !this.controller.working || frame !== undefined) return;
-      frame = requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(() => {
         frame = undefined;
         this.scrollToEnd('auto');
       });
@@ -424,7 +424,7 @@ export class Composer {
 
   private scroller(): HTMLElement | undefined {
     const cm = (this.view.editor as unknown as { cm?: EditorView }).cm;
-    return this.view.getMode() === 'preview' ? (this.view.contentEl.querySelector('.markdown-preview-view') as HTMLElement | null) ?? undefined : cm?.scrollDOM;
+    return this.view.getMode() === 'preview' ? this.view.contentEl.querySelector<HTMLElement>('.markdown-preview-view') ?? undefined : cm?.scrollDOM;
   }
 }
 
@@ -441,6 +441,6 @@ function capitalize(text: string): string {
 }
 
 function firstSentence(text: string): string {
-  const sentence = text.split(/(?<=\.)\s/)[0] ?? text;
+  const sentence = /^.*?\.(?=\s)/s.exec(text)?.[0] ?? text;
   return sentence.length > 90 ? `${sentence.slice(0, 89)}…` : sentence;
 }

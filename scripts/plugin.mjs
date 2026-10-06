@@ -16,7 +16,7 @@ async function install() {
   for (const target of targets) {
     await mkdir(target, { recursive: true });
     if (target !== DIST) await copyFile(path.join(DIST, 'main.js'), path.join(target, 'main.js'));
-    await copyFile('plugin/manifest.json', path.join(target, 'manifest.json'));
+    await copyFile('manifest.json', path.join(target, 'manifest.json'));
     await copyFile('plugin/styles.css', path.join(target, 'styles.css'));
   }
   console.log(`Plugin built${values.vault ? ` and installed in ${values.vault}` : ''}.`);

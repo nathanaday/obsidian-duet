@@ -90,22 +90,8 @@ export class DuetSettingTab extends PluginSettingTab {
 
     containerEl.createEl('p', {
       cls: 'duet-settings-intro',
-      text: 'Write @name followed by a request on a line of a note, then press Enter. The agent replies in a callout under the line and can edit that note while you keep typing. For a longer exchange, run "New conversation" from the command palette.',
+      text: 'Write @name followed by a request on a line of a note, then press Enter. The agent replies in a callout under the line and can edit that note while you keep typing. For a longer exchange, start a conversation note from the command palette.',
     });
-
-    new Setting(containerEl).setName('Agents').setHeading();
-
-    this.plugin.settings.profiles.forEach((profile, index) => this.displayProfile(containerEl, profile, index));
-
-    new Setting(containerEl).addButton((button) =>
-      button.setButtonText('Add agent').onClick(async () => {
-        this.plugin.settings.profiles.push({ ...DEFAULT_SETTINGS.profiles[0]!, name: this.unusedName() });
-        await this.plugin.saveSettings();
-        this.display();
-      }),
-    );
-
-    new Setting(containerEl).setName('General').setHeading();
 
     new Setting(containerEl)
       .setName('Conversation folder')
@@ -129,7 +115,7 @@ export class DuetSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Close idle agents after')
-      .setDesc('Minutes without a mention before an agent process stops. The next mention in the note continues the same conversation.')
+      .setDesc('Minutes without activity before an agent process stops. The next message continues the same conversation.')
       .addText((text) =>
         text.setValue(String(this.plugin.settings.idleMinutes)).onChange(async (value) => {
           const minutes = Number(value);
@@ -139,6 +125,18 @@ export class DuetSettingTab extends PluginSettingTab {
           }
         }),
       );
+
+    new Setting(containerEl).setName('Agents').setHeading();
+
+    this.plugin.settings.profiles.forEach((profile, index) => this.displayProfile(containerEl, profile, index));
+
+    new Setting(containerEl).addButton((button) =>
+      button.setButtonText('Add agent').onClick(async () => {
+        this.plugin.settings.profiles.push({ ...DEFAULT_SETTINGS.profiles[0]!, name: this.unusedName() });
+        await this.plugin.saveSettings();
+        this.display();
+      }),
+    );
   }
 
   private displayProfile(containerEl: HTMLElement, profile: AgentProfile, index: number): void {
@@ -198,14 +196,14 @@ export class DuetSettingTab extends PluginSettingTab {
       .setName('Approvals')
       .setDesc('For conversation notes. In a mention, the agent can change only the note it was asked in, without asking.')
       .addDropdown((dropdown) =>
-      dropdown
-        .addOptions(APPROVALS[profile.harness] as Record<string, string>)
-        .setValue(profile.approval)
-        .onChange(async (value) => {
-          profile.approval = value as ApprovalSetting;
-          await save();
-        }),
-    );
+        dropdown
+          .addOptions(APPROVALS[profile.harness])
+          .setValue(profile.approval)
+          .onChange(async (value) => {
+            profile.approval = value as ApprovalSetting;
+            await save();
+          }),
+      );
 
     new Setting(group)
       .setName('Model')

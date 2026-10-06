@@ -1,5 +1,6 @@
 import type { EditorView } from '@codemirror/view';
-import { type App, MarkdownView, type Plugin, TFile } from 'obsidian';
+import { around } from 'monkey-around';
+import { type App, MarkdownView, type Plugin, TFile, type Vault } from 'obsidian';
 import type { AgentPeer } from './agent-peer.ts';
 import { type BindingHost, EditorBinding, setBindingHost } from './binding.ts';
 import { DISK_ORIGIN, SharedNote } from './shared-note.ts';
@@ -60,22 +61,27 @@ export class CollabHub implements BindingHost {
     plugin.registerEvent(this.app.vault.on('delete', (file) => this.notes.has(file.path) && this.dispose(this.notes.get(file.path)!)));
     plugin.registerEvent(this.app.workspace.on('layout-change', () => this.follows > 0 && void this.followOpenEditors()));
 
-    const hub = this;
-    const prototype = MarkdownView.prototype as unknown as { setViewData(data: string, clear: boolean): void };
-    const setViewData = prototype.setViewData;
-    prototype.setViewData = function (this: MarkdownView, data: string, clear: boolean) {
-      if (!clear && hub.skipReload(this, data)) return;
-      return setViewData.call(this, data, clear);
-    };
-    this.restore.push(() => (prototype.setViewData = setViewData));
+    const skipReload = (view: MarkdownView, data: string) => this.skipReload(view, data);
+    this.restore.push(
+      around(MarkdownView.prototype, {
+        setViewData: (next) =>
+          function (this: MarkdownView, data: string, clear: boolean) {
+            if (!clear && skipReload(this, data)) return;
+            return next.call(this, data, clear);
+          },
+      }),
+    );
 
-    const vault = this.app.vault;
-    const modify = vault.modify;
-    vault.modify = function (file, data, options) {
-      hub.notes.get(file.path)?.willWrite(normalizeNewlines(data));
-      return modify.call(this, file, data, options);
-    };
-    this.restore.push(() => (vault.modify = modify));
+    const willWrite = (file: TFile, data: string) => this.notes.get(file.path)?.willWrite(normalizeNewlines(data));
+    this.restore.push(
+      around(this.app.vault, {
+        modify: (next) =>
+          function (this: Vault, file, data, options) {
+            willWrite(file, data);
+            return next.call(this, file, data, options);
+          },
+      }),
+    );
   }
 
   get(path: string): SharedNote | undefined {

@@ -89,12 +89,10 @@ class CaretMarker implements LayerMarker {
   ) {}
 
   draw(): HTMLElement {
-    const dom = document.createElement('div');
-    dom.className = 'duet-caret';
-    const flag = dom.appendChild(document.createElement('div'));
-    flag.className = 'duet-caret-flag';
-    flag.appendChild(document.createElement('span')).className = 'duet-caret-name';
-    flag.appendChild(document.createElement('span')).className = 'duet-caret-status';
+    const dom = createDiv({ cls: 'duet-caret' });
+    const flag = dom.createDiv({ cls: 'duet-caret-flag' });
+    flag.createSpan({ cls: 'duet-caret-name' });
+    flag.createSpan({ cls: 'duet-caret-status' });
     this.write(dom);
     return dom;
   }
@@ -198,8 +196,7 @@ const edgeIndicator = ViewPlugin.fromClass(
     private target: number | undefined;
 
     constructor(private readonly view: EditorView) {
-      this.dom = view.dom.appendChild(document.createElement('button'));
-      this.dom.className = 'duet-edge';
+      this.dom = view.dom.createEl('button', { cls: 'duet-edge' });
       this.dom.addEventListener('mousedown', (event) => {
         event.preventDefault();
         if (this.target !== undefined) view.dispatch({ effects: EditorView.scrollIntoView(this.target, { y: 'center' }) });
@@ -268,7 +265,7 @@ const freshField = StateField.define<DecorationSet>({
       const kept: ReturnType<Decoration['range']>[] = [];
       const cursor = decorations.iter();
       for (; cursor.value; cursor.next()) {
-        const spec = cursor.value.spec.fresh as FreshSpec;
+        const spec = (cursor.value.spec as { fresh: FreshSpec }).fresh;
         const age = now - spec.at;
         if (age >= FRESH_MS + FADE_MS) continue;
         kept.push(freshMark(spec, age >= FRESH_MS).range(cursor.from, cursor.to));

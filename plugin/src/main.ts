@@ -158,7 +158,11 @@ export default class DuetPlugin extends Plugin {
     );
   }
 
-  async onunload(): Promise<void> {
+  onunload(): void {
+    void this.shutdown();
+  }
+
+  private async shutdown(): Promise<void> {
     await this.conversations.destroy();
     await this.mentions.closeAll();
     this.hub.destroy();

@@ -443,6 +443,7 @@
 textarea.duet-input {
   display: block;
   width: 100%;
+  height: var(--duet-input-height, auto);
   min-height: 2.6em;
   max-height: 220px;
   padding: 12px 16px 2px;

@@ -203,7 +203,7 @@ export class EditorBinding implements NoteView {
 
   private readonly onPresence = (): void => {
     if (this.redraw !== undefined) return;
-    this.redraw = requestAnimationFrame(() => {
+    this.redraw = window.requestAnimationFrame(() => {
       this.redraw = undefined;
       if (this.view.dom.isConnected) this.view.dispatch({ annotations: presenceAnnotation.of(true) });
     });

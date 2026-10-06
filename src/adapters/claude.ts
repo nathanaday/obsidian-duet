@@ -324,7 +324,7 @@ function isTurnStart(message: SDKMessage): boolean {
 function toolResultText(content: unknown): string | undefined {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return undefined;
-  return content
+  return (content as unknown[])
     .map((part) => (part && typeof part === 'object' && 'text' in part ? String(part.text) : ''))
     .join('');
 }

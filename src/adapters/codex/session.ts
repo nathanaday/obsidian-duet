@@ -1,6 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { z } from 'zod';
-import { lineDiff } from '../../diff.ts';
 import { findExecutable, harnessEnvironment, pathDisplay } from '../../environment.ts';
 import {
   type AgentTool,

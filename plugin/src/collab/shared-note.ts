@@ -74,7 +74,7 @@ export class SharedNote {
   }
 
   get content(): string {
-    return this.text.toString();
+    return this.text.toJSON();
   }
 
   /** True when an editor shows the note and the user can see it. */
@@ -150,7 +150,7 @@ export class SharedNote {
     const ops = diffOps(base.text, text);
     const author = this.io.author(this);
     const fork = this.fork(base.snapshot);
-    if (fork.getText('content').toString() !== base.text) {
+    if (fork.getText('content').toJSON() !== base.text) {
       // The snapshot no longer reproduces the base. Apply the change against the current text instead.
       fork.destroy();
       this.applyOps(diffOps(this.content, text), author?.origin ?? DISK_ORIGIN);

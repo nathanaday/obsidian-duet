@@ -50,7 +50,7 @@ export class RpcConnection {
     if (this.closedError) return Promise.reject(this.closedError);
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+      this.pending.set(id, { resolve, reject });
       this.write({ id, method, params });
     });
   }
@@ -63,7 +63,7 @@ export class RpcConnection {
   close(error = new Error('Connection closed')): void {
     if (this.closedError) return;
     this.closedError = error;
-    for (const { reject } of this.pending.values()) reject(error);
+    for (const request of this.pending.values()) request.reject(error);
     this.pending.clear();
   }
 
@@ -76,7 +76,7 @@ export class RpcConnection {
     if (!line.trim()) return;
     let message: Message;
     try {
-      message = JSON.parse(line);
+      message = JSON.parse(line) as Message;
     } catch {
       return;
     }

@@ -61,7 +61,7 @@ export class AgentPeer {
 
   setCursor(anchor: Y.RelativePosition, head: Y.RelativePosition = anchor): void {
     if (this.disposed) return;
-    this.awareness.setLocalStateField('cursor', { anchor: Y.relativePositionToJSON(anchor), head: Y.relativePositionToJSON(head) });
+    this.awareness.setLocalStateField('cursor', { anchor: Y.relativePositionToJSON(anchor) as unknown, head: Y.relativePositionToJSON(head) as unknown });
   }
 
   hideCursor(): void {

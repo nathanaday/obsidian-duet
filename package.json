@@ -1,20 +1,23 @@
 {
   "name": "obsidian-duet",
   "version": "0.1.0",
-  "description": "Drive Claude Code and Codex agent sessions from a TypeScript app.",
+  "description": "Work with Claude Code or Codex in your Obsidian notes, and drive their sessions from a TypeScript app.",
   "license": "MIT",
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "chat": "tsx src/cli/chat.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p plugin",
+    "lint": "npm install --prefix scripts/lint --no-audit --no-fund --silent && npm run --prefix scripts/lint lint",
     "test": "vitest run test/unit",
     "test:live": "vitest run test/live",
     "bundle": "node scripts/bundle.mjs",
     "demo": "vite --config demo/vite.config.ts",
     "plugin:build": "node scripts/plugin.mjs",
     "plugin:dev": "node scripts/dev-vault.mjs && node scripts/plugin.mjs --vault dev-vault --watch",
-    "test:obsidian": "vitest run test/obsidian"
+    "test:obsidian": "vitest run test/obsidian",
+    "screenshots": "tsx scripts/screenshots/capture.ts",
+    "version": "node scripts/version.mjs && git add manifest.json versions.json"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.289",
@@ -24,6 +27,7 @@
   "devDependencies": {
     "@codemirror/language": "^6.12.4",
     "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
     "@fontsource-variable/schibsted-grotesk": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@types/node": "^26.6.4",
@@ -32,6 +36,7 @@
     "dompurify": "^3.4.16",
     "esbuild": "^0.28.2",
     "marked": "^18.0.14",
+    "monkey-around": "^3.0.0",
     "obsidian": "^1.8.7",
     "playwright-core": "^1.63.0",
     "tsx": "^4.23.15",

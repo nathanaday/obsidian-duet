@@ -223,7 +223,7 @@ export class MentionAgents {
   private async start(file: TFile, profile: AgentProfile, key: string): Promise<LiveSession> {
     const presence = new Presence(profile, this.options.animate);
     let current: () => Reply | undefined = () => undefined;
-    const tools = new NoteTools({
+    const tools: NoteTools = new NoteTools({
       note: () => this.hub.acquire(file, tools),
       peer: (note) => presence.peer(note),
       hidden: (note) => hiddenRange(note, current()),
