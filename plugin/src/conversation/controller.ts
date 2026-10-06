@@ -9,7 +9,7 @@ import type {
   PermissionRequest,
 } from '../../../src/index.ts';
 import { activity, Presence, startAgent } from '../agent-session.ts';
-import type { CollabHub } from '../collab/hub.ts';
+import type { CollabHub, DiskWriter } from '../collab/hub.ts';
 import { LiveRegion } from '../collab/region.ts';
 import { LOCAL_ORIGIN, type SharedNote } from '../collab/shared-note.ts';
 import type { PermissionPrompts } from '../permission-modal.ts';
@@ -55,6 +55,8 @@ const MODES: Record<string, ApprovalSetting> = { ask: 'ask', edits: 'accept-edit
 interface Turn {
   transcript: TurnTranscript;
   region: LiveRegion;
+  /** The agent as a writer of files, while the turn runs. */
+  writer: DiskWriter;
   stopWriting: () => void;
   /** Files that the agent's tools may be changing now. */
   writing: Map<string, number>;
@@ -256,14 +258,17 @@ export class ConversationController {
     // The turn goes before the note's last line break, so text the user types at the very end stays out of it.
     const at = note.content.length - 1;
     const writing = new Map<string, number>();
+    const writer: DiskWriter = {
+      name: this.agentName,
+      writes: (path) => writing.has(path),
+      peer: (target) => this.presence.peer(target),
+    };
     this.turn = {
       transcript: new TurnTranscript(),
       region: new LiveRegion(peer, at, at),
       writing,
-      stopWriting: this.hub.addWriter({
-        writes: (path) => writing.has(path),
-        peer: (target) => this.presence.peer(target),
-      }),
+      writer,
+      stopWriting: this.hub.addWriter(writer),
     };
     peer.setCursor(note.relative(at, -1));
   }
@@ -360,6 +365,8 @@ export class ConversationController {
       effort: this.property('effort'),
       approval: this.approval,
       onPermission: (request) => this.ask(request),
+      // Shares a note before the agent's tool changes it, so the change merges as the agent's edit.
+      beforeFileChange: (paths) => this.turn && this.hub.prepare(this.turn.writer, paths),
     })
       .then(async (session) => {
         this.session = session;

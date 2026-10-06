@@ -28,6 +28,12 @@ export interface SessionOptions {
    * that change them. It can still change things through `tools`. Default: `workspace`.
    */
   access?: 'workspace' | 'read-only';
+  /**
+   * Called before the agent changes files with its own tools, with the paths that it will change. Paths inside
+   * `cwd` are relative. Claude Code waits for the promise. Codex waits only when it asks for approval first;
+   * otherwise the change can start before the promise settles. Errors are ignored.
+   */
+  beforeFileChange?: (paths: string[]) => Promise<void> | void;
 }
 
 export interface ToolSet {

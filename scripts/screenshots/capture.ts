@@ -21,6 +21,7 @@ await mkdir(OUT, { recursive: true });
 try {
   await prepare();
   await mentionEdit();
+  await lens();
   await mentionReply();
   await conversation();
 } finally {
@@ -46,6 +47,7 @@ async function prepare(): Promise<void> {
 /** A GIF of a mention that edits the note. */
 async function mentionEdit(): Promise<void> {
   await openAtEnd(page, 'Trip to Lisbon.md');
+  await parkPointer();
   const recording = await record();
   await mention('@claude Clean this up: fix the spelling and capitalization, and make each line a bullet', 30);
   await page.waitForSelector('.duet-caret', { timeout: 30_000 });
@@ -56,6 +58,16 @@ async function mentionEdit(): Promise<void> {
   await idle();
   await page.waitForTimeout(2500);
   await recording.save('mention-edit', '.workspace-leaf.mod-active');
+}
+
+/** The contribution lens on the note that the agent just edited. */
+async function lens(): Promise<void> {
+  await page.evaluate(() => (window as any).app.commands.executeCommandById('duet:toggle-lens'));
+  await page.waitForSelector('.duet-lens');
+  await page.waitForTimeout(500);
+  await shot('lens');
+  await page.evaluate(() => (window as any).app.commands.executeCommandById('duet:toggle-lens'));
+  await page.waitForSelector('.duet-lens', { state: 'detached' });
 }
 
 /** A mention that answers in a callout. */
@@ -136,7 +148,14 @@ async function idle(): Promise<void> {
   await page.waitForTimeout(300);
 }
 
+/** Moves the pointer to the empty right margin, so no block shows its hover state. */
+async function parkPointer(): Promise<void> {
+  await page.mouse.move(WINDOW.width - 8, WINDOW.height / 2);
+  await page.waitForTimeout(200);
+}
+
 async function shot(name: string): Promise<void> {
+  await parkPointer();
   const file = path.join(OUT, `${name}.png`);
   await page.screenshot({ path: file });
   execFileSync('sips', ['--resampleWidth', String(PNG_WIDTH), file], { stdio: 'ignore' });

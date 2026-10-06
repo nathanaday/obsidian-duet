@@ -49,6 +49,13 @@ export class AgentPeer {
   /** Transaction origin of text that the peer writes as its own output, such as a reply. */
   readonly writer = { peer: this };
 
+  /** The peer that made a change with this transaction origin, as an edit or as its own output. */
+  static of(origin: unknown): AgentPeer | undefined {
+    if (origin instanceof AgentPeer) return origin;
+    if (origin && typeof origin === 'object' && 'peer' in origin && origin.peer instanceof AgentPeer) return origin.peer;
+    return undefined;
+  }
+
   /** True when edits should play as typing: animations are on and the user can see the note. */
   get animate(): boolean {
     return this.animations() && this.note.visible;

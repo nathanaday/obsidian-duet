@@ -1,9 +1,13 @@
+import type { EditorView } from '@codemirror/view';
 import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
 import { bindingPlugin } from './collab/binding.ts';
 import { CollabHub } from './collab/hub.ts';
 import { presenceExtensions } from './collab/presence.ts';
+import { ContributionLedger } from './contributions/ledger.ts';
+import { ContributionLens } from './contributions/lens.ts';
 import { ConversationManager } from './conversation/manager.ts';
 import { enterTrigger } from './enter-trigger.ts';
+import { mentionTags, tagPostProcessor, type TagStyle } from './mention-tags.ts';
 import { MentionAgents, type SessionIndex } from './mentions.ts';
 import { PermissionPrompts } from './permission-modal.ts';
 import { displayName, type DuetSettings, DuetSettingTab, upgradeSettings } from './settings.ts';
@@ -18,8 +22,11 @@ export default class DuetPlugin extends Plugin {
   hub!: CollabHub;
   mentions!: MentionAgents;
   conversations!: ConversationManager;
+  ledger!: ContributionLedger;
+  lens!: ContributionLens;
   private sessions: SessionIndex = {};
   private statusEl!: HTMLElement;
+  private lensButton!: HTMLElement;
 
   async onload(): Promise<void> {
     const data = ((await this.loadData()) ?? {}) as Partial<PluginData>;
@@ -29,6 +36,15 @@ export default class DuetPlugin extends Plugin {
     const animate = () => this.settings.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.hub = new CollabHub(this.app);
     this.hub.install(this, [bindingPlugin, presenceExtensions]);
+
+    this.ledger = new ContributionLedger(this.app);
+    this.ledger.install(this);
+    this.hub.observe(this.ledger);
+    this.lens = new ContributionLens(this.app, this.ledger, () => this.settings.lens);
+    this.ledger.onChange((path) => this.lens.refresh(path));
+    this.registerEditorExtension([this.lens.extension(), mentionTags(() => this.tagStyles())]);
+    this.registerMarkdownPostProcessor(this.lens.postProcessor);
+    this.registerMarkdownPostProcessor(tagPostProcessor(() => this.tagStyles()));
 
     const prompts = new PermissionPrompts(this.app);
     this.conversations = new ConversationManager(this.app, this.hub, prompts, {
@@ -55,6 +71,14 @@ export default class DuetPlugin extends Plugin {
     });
 
     this.addRibbonIcon('message-square-plus', 'New conversation', () => void this.conversations.create(this.settings.profiles[0]!));
+    this.lensButton = this.addRibbonIcon('highlighter', 'Toggle contribution lens', () => void this.toggleLens());
+    this.lensButton.addClass('duet-lens-toggle');
+    this.lensButton.toggleClass('is-active', this.settings.lens);
+    this.addCommand({
+      id: 'toggle-lens',
+      name: 'Toggle contribution lens',
+      callback: () => void this.toggleLens(),
+    });
     this.addCommand({
       id: 'new-chat',
       name: 'New conversation',
@@ -166,11 +190,31 @@ export default class DuetPlugin extends Plugin {
     await this.conversations.destroy();
     await this.mentions.closeAll();
     this.hub.destroy();
+    await this.ledger.flush();
   }
 
   async saveSettings(): Promise<void> {
     await this.persist();
+    this.refreshEditors();
     await this.mentions.closeIdle();
+  }
+
+  async toggleLens(): Promise<void> {
+    this.settings.lens = !this.settings.lens;
+    this.lensButton.toggleClass('is-active', this.settings.lens);
+    this.lens.refresh();
+    await this.persist();
+  }
+
+  private tagStyles(): TagStyle[] {
+    return this.settings.profiles.map((profile) => ({ name: profile.name, color: profile.color }));
+  }
+
+  /** Lets editor extensions see changed settings, such as a new agent tag. */
+  private refreshEditors(): void {
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      if (leaf.view instanceof MarkdownView) (leaf.view.editor as unknown as { cm?: EditorView }).cm?.dispatch({});
+    });
   }
 
   private persist(): Promise<void> {

@@ -13,15 +13,18 @@ import {
 
 const TIMEOUT = 180_000;
 
-/** Runs the same scenarios against a real harness. `writeRequest` must make the agent ask for approval. */
-export function liveSuite(harness: 'claude' | 'codex', extra: Partial<CreateSessionOptions>, writeRequest: string) {
+/**
+ * Runs the same scenarios against a real harness. `writeRequest` must make the agent ask for approval.
+ * `editRequest` must make the agent create note.txt with its file-editing tool, not a shell command.
+ */
+export function liveSuite(harness: 'claude' | 'codex', extra: Partial<CreateSessionOptions>, writeRequest: string, editRequest = writeRequest) {
   describe(`${harness} (live)`, () => {
     const sessions: AgentSession[] = [];
     afterEach(async () => {
       await Promise.all(sessions.splice(0).map((session) => session.close()));
     });
 
-    async function start(decision: PermissionDecision = 'allow', resume?: string) {
+    async function start(decision: PermissionDecision = 'allow', resume?: string, options: Partial<CreateSessionOptions> = {}) {
       const cwd = mkdtempSync(path.join(tmpdir(), `duet-${harness}-`));
       const requests: PermissionRequest[] = [];
       const events: AgentEvent[] = [];
@@ -35,6 +38,7 @@ export function liveSuite(harness: 'claude' | 'codex', extra: Partial<CreateSess
           return decision;
         },
         ...extra,
+        ...options,
       } as CreateSessionOptions);
       sessions.push(session);
       session.on((event) => events.push(event));
@@ -56,6 +60,21 @@ export function liveSuite(harness: 'claude' | 'codex', extra: Partial<CreateSess
       expect(result.status).toBe('completed');
       expect(requests.length).toBeGreaterThan(0);
       expect(readFileSync(path.join(cwd, 'note.txt'), 'utf8').trim()).toBe('hello');
+    });
+
+    it('calls beforeFileChange before the file changes', { timeout: TIMEOUT }, async () => {
+      const calls: { paths: string[]; existed: boolean }[] = [];
+      let cwd = '';
+      const started = await start('allow', undefined, {
+        beforeFileChange: (paths) => {
+          calls.push({ paths, existed: existsSync(path.join(cwd, 'note.txt')) });
+        },
+      });
+      cwd = started.cwd;
+      const result = await started.session.send(editRequest);
+      expect(result.status).toBe('completed');
+      expect(calls.length).toBeGreaterThan(0);
+      expect(calls[0]).toEqual({ paths: ['note.txt'], existed: false });
     });
 
     it('does not write when denied', { timeout: TIMEOUT }, async () => {

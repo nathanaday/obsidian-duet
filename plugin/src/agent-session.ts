@@ -23,6 +23,7 @@ export interface StartOptions {
   effort?: string;
   approval?: ApprovalSetting;
   onPermission?: PermissionHandler;
+  beforeFileChange?: (paths: string[]) => Promise<void> | void;
 }
 
 export function vaultRoot(app: App): string {
@@ -50,6 +51,7 @@ export async function startAgent(app: App, options: StartOptions): Promise<Agent
     tools: options.tools,
     access: options.access,
     onPermission: options.onPermission,
+    beforeFileChange: options.beforeFileChange,
     ...approvalOptions(profile.harness, options.approval ?? profile.approval),
     ...(profile.harness === 'claude' && { sdkOptions: { strictMcpConfig: !profile.userTools } }),
   });

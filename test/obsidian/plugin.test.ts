@@ -58,7 +58,25 @@ describe('Duet in Obsidian', () => {
     if (SHOTS) await page().screenshot({ path: path.join(SHOTS, `obsidian-${name}.png`) });
   }
 
+  /** The note's contribution ledger, as saved. */
+  async function ledger(note: string): Promise<{ text: string; spans: { from: number; to: number; agent: string }[] }> {
+    const file = path.join(obsidian.vault, '.duet/contributions', `${note}.json`);
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(file) && Date.now() < deadline) await page().waitForTimeout(250);
+    return JSON.parse(readFileSync(file, 'utf8'));
+  }
+
   describe('mentions', () => {
+    it('shows an agent tag as a pill as soon as it is typed', { timeout: TIMEOUT }, async () => {
+      await openAtEnd(page(), 'Welcome.md');
+      await page().keyboard.type('@claude');
+      await page().waitForSelector('.duet-tag', { timeout: 5000 });
+      expect(await page().textContent('.duet-tag')).toBe('@claude');
+      await page().keyboard.type('x');
+      await page().waitForSelector('.duet-tag', { state: 'detached', timeout: 5000 });
+      for (let i = 0; i < 8; i++) await page().keyboard.press('Backspace');
+    });
+
     it('answers a mention in a callout under the line, with a live cursor', { timeout: TIMEOUT }, async () => {
       await mention('Ideas.md', '@claude Reply with exactly the word: pineapple');
       await page().waitForSelector('.duet-caret', { timeout: 30_000 });
@@ -101,6 +119,21 @@ describe('Duet in Obsidian', () => {
       }
       await page().waitForTimeout(2500);
       expect(await obsidian.read('Ideas.md')).toBe(text);
+
+      // The ledger records the agent's text, and not the sentence that the user typed meanwhile.
+      const record = await ledger('Ideas.md');
+      expect(record.text).toBe(text);
+      expect(record.spans.length).toBeGreaterThan(0);
+      expect(record.spans.every((span) => span.agent === 'Claude')).toBe(true);
+      const typedAt = text.indexOf(typed);
+      expect(record.spans.some((span) => span.from < typedAt + typed.length && span.to > typedAt)).toBe(false);
+      expect(record.spans.some((span) => text.slice(span.from, span.to).includes('Done'))).toBe(true);
+
+      // The lens marks that text while it is on.
+      await page().evaluate(() => (window as any).app.commands.executeCommandById('duet:toggle-lens'));
+      await page().waitForSelector('.duet-lens', { timeout: 5000 });
+      await page().evaluate(() => (window as any).app.commands.executeCommandById('duet:toggle-lens'));
+      await page().waitForSelector('.duet-lens', { state: 'detached', timeout: 5000 });
     });
 
     it('reverts the agent\'s last changes with a command', { timeout: TIMEOUT }, async () => {
@@ -229,6 +262,19 @@ describe('Duet in Obsidian', () => {
       await page().waitForTimeout(2500);
       expect(await obsidian.read('Reading list.md')).toBe(list);
       expect(await obsidian.waitForNote(chat, () => true)).toMatch(/> \[!activity\]- .*Edited a file[\s\S]*```diff/);
+    });
+
+    it('records an edit to a note that is not open', { timeout: TIMEOUT }, async () => {
+      await send('Use your Edit tool to replace the first line of [[Welcome]] with "# Hello from the agent". Then reply with: Done.');
+      await page().waitForSelector('.duet-composer.has-approval', { timeout: 90_000 });
+      await page().focus('.duet-composer textarea');
+      await page().keyboard.press('y');
+      await idle();
+      const welcome = readFileSync(path.join(obsidian.vault, 'Welcome.md'), 'utf8');
+      expect(welcome.split('\n')[0]).toBe('# Hello from the agent');
+      const record = await ledger('Welcome.md');
+      expect(record.text).toBe(welcome);
+      expect(record.spans.map((span) => welcome.slice(span.from, span.to)).join('')).toContain('Hello from the agent');
     });
 
     it('ends the conversation and keeps the note as a record', { timeout: TIMEOUT }, async () => {

@@ -38,7 +38,7 @@ The answer streams into a callout under the line. For Codex, write `@codex` inst
 
 ### Mentions
 
-Write `@claude` or `@codex` and a request, then press Enter at the end of the line. The tag can follow other text on the line.
+Write `@claude` or `@codex` and a request, then press Enter at the end of the line. The tag can follow other text on the line. When you type the tag of an agent, it changes to a pill in the agent's color, so you know that the tag will work.
 
 ![A mention answers in a callout under the line](docs/images/mention-reply.png)
 
@@ -48,7 +48,7 @@ Write `@claude` or `@codex` and a request, then press Enter at the end of the li
 - **Stop:** run **Duet: Stop the agent in this note**. Assign it a hotkey if you use it often.
 - **Start over:** run **Duet: Forget the mention conversation in this note**.
 
-Duet ignores tags in code blocks, in blockquotes and in email addresses.
+Duet ignores tags in code blocks, in blockquotes and in email addresses. These tags stay plain text.
 
 ### Conversation notes
 
@@ -70,6 +70,19 @@ In a conversation, the agent can change any file in the vault. Before it changes
 When the agent changes a note that is open, you see its cursor in that note. Its changes merge with the text that you type at the same time.
 
 ![Claude edits the open reading list while the conversation continues](docs/images/conversation-edit.png)
+
+### Contribution lens
+
+Duet records which text of a note its agents wrote. To see it, select the lens button in the ribbon, or run **Duet: Toggle contribution lens**. Text that a Duet agent wrote gets a cyan mark. Hold the pointer over a mark to see which agent wrote it and when. All other text stays plain.
+
+![The lens marks the words that Claude changed in the note, and its reply](docs/images/lens.png)
+
+- **What counts:** all text that a Duet agent writes: its edits, its mention replies, and its parts of a conversation note. When an agent changes part of a word, the whole word counts as the agent's.
+- **Your changes win:** when you or any other program changes a word that an agent wrote, that word is no longer marked. Duet also follows changes made while it was not running, for example through sync, by comparing the note with the text that it saw last.
+- **Not an AI detector:** the lens shows only what Duet's own agents wrote. Text that another tool wrote, or that you pasted, stays plain, even when an AI wrote it.
+- **Limits:** a Codex edit can go unrecorded when Codex does not ask for approval first. A file that an agent changes with a shell command is not recorded. In Live Preview, a rendered block such as a callout or a table gets a bar on its left edge instead of marks. In Reading view, whole sections get the bar.
+
+Duet keeps the record in the hidden folder `.duet/contributions/` in your vault, with one file for each note that an agent wrote in.
 
 ## Settings
 
@@ -103,6 +116,7 @@ Duet does not connect to the internet. It starts Claude Code or Codex on your co
 
 - **Network use:** Claude Code sends your requests, and the note text that it reads, to Anthropic. Codex sends them to OpenAI. This is necessary because the language models run on the providers' servers.
 - **Accounts and payment:** Duet is free. Claude Code and Codex each need an account with their provider. Their use can cost money under that account's plan.
+- **Files in the vault:** Duet saves its contribution record in the hidden folder `.duet/contributions/`. Each file holds the positions of the agent's text and a copy of the note's text. Duet uses the copy to follow changes that it did not see.
 - **Files outside the vault:** Duet runs programs that are installed outside the vault: `claude` or `codex`, and your login shell, once after Obsidian starts, to read its PATH. Claude Code and Codex save their conversation history in their own folders, such as `~/.claude` and `~/.codex`. The agents work in the vault folder. Their own permission rules control access to other files, and Duet shows you each approval request that they send.
 - **Telemetry:** Duet collects no data. Claude Code and Codex follow the privacy policies of Anthropic and OpenAI.
 

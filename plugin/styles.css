@@ -24,6 +24,54 @@
   }
 }
 
+.duet-tag {
+  padding: var(--tag-padding-y) var(--tag-padding-x);
+  border-radius: var(--tag-radius);
+  background-color: color-mix(in srgb, var(--duet-agent) 15%, transparent);
+  color: var(--duet-agent);
+  font-size: var(--tag-size);
+  font-weight: var(--font-semibold);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.duet-lens {
+  border-radius: 3px;
+  background-color: rgba(var(--color-cyan-rgb), 0.17);
+  box-shadow: 0 1.5px 0 rgba(var(--color-cyan-rgb), 0.6);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.duet-lens-block {
+  position: relative;
+}
+
+.duet-lens-block::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: -12px;
+  width: 3px;
+  border-radius: 2px;
+  background-color: rgba(var(--color-cyan-rgb), 0.85);
+}
+
+/* The editor clips a widget's outside, and a rendered callout covers its inside, so the bar goes on top. */
+.cm-embed-block.duet-lens-block::before {
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 2px 0 0 2px;
+}
+
+.side-dock-ribbon-action.duet-lens-toggle.is-active {
+  background-color: rgba(var(--color-cyan-rgb), 0.15);
+  color: var(--color-cyan);
+}
+
 .duet-settings-intro {
   color: var(--text-muted);
 }

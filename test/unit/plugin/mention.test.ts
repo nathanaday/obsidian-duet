@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findMention } from '../../../plugin/src/mention.ts';
+import { findMention, findTags } from '../../../plugin/src/mention.ts';
 
 const NAMES = ['claude', 'codex', 'work'];
 
@@ -34,5 +34,29 @@ describe('findMention', () => {
   it('ignores blockquotes and callouts', () => {
     expect(findMention('> @claude do this', NAMES)).toBeUndefined();
     expect(findMention('  > [!agent]+ Claude @claude do this', NAMES)).toBeUndefined();
+  });
+});
+
+describe('findTags', () => {
+  it('finds each tag of a configured agent, with its range', () => {
+    expect(findTags('@claude ask @Codex too', NAMES)).toEqual([
+      { name: 'claude', from: 0, to: 7 },
+      { name: 'codex', from: 12, to: 18 },
+    ]);
+  });
+
+  it('finds a tag before the request is typed', () => {
+    expect(findTags('Draft (@work', NAMES)).toEqual([{ name: 'work', from: 7, to: 12 }]);
+  });
+
+  it('ignores email addresses, longer names and quoted lines', () => {
+    expect(findTags('ana@claude.ai @claudette @work-notes', NAMES)).toEqual([]);
+    expect(findTags('> @claude in a quote', NAMES)).toEqual([]);
+  });
+});
+
+describe('findMention with several tags', () => {
+  it('uses the first tag that a request follows', () => {
+    expect(findMention('Ping @claude. @codex do this', NAMES)).toEqual({ name: 'codex', prompt: 'do this' });
   });
 });

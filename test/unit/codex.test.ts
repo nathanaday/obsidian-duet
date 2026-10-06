@@ -64,6 +64,24 @@ describe('codex adapter', () => {
     expect(requests[0]).toMatchObject({ tool: 'fileChange', title: 'Edit a.md', detail: '-old\n+new' });
   });
 
+  it('calls beforeFileChange when a file change starts and again before it asks', async () => {
+    const calls: string[] = [];
+    session = await startCodexSession({
+      cwd: process.cwd(),
+      clientName: 'test',
+      executablePath: FAKE,
+      beforeFileChange: async (paths) => {
+        calls.push(`before ${paths.join(', ')}`);
+      },
+      onPermission: async (request) => {
+        calls.push(`ask ${request.title}`);
+        return 'allow';
+      },
+    });
+    await session.send('file');
+    expect(calls).toEqual(['before a.md', 'before a.md', 'ask Edit a.md']);
+  });
+
   it('grants requested permissions only when allowed', async () => {
     const allowed = await start('allow-session');
     expect(JSON.parse((await allowed.session.send('permissions')).text)).toEqual({

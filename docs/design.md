@@ -183,6 +183,30 @@ Events reach the right reply through a queue: each mention adds a reply to its s
 
 Claude Code can run a command in the background and end its turn at once. When the command finishes, Claude Code starts a new turn by itself. A note has no place for that reply, so the plugin sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` for Claude sessions, and the instructions ask both agents to wait for commands. A turn that starts without a mention still gets a "(follow-up)" callout at the end of the note. In a conversation note, it gets a turn at the end of the note.
 
+### Agent tags
+
+An editor extension shows each `@name` tag of a configured agent as a pill in the agent's color, like a `#tag`. It uses the same rules as the Enter trigger: `findTags` in `mention.ts` finds the tags, and tags in code, frontmatter, math, blockquotes and email addresses stay plain. The pill shows as soon as the name is complete, before the request, so the user sees that the tag will work. A Reading view post-processor wraps tags in the same pill.
+
+### Contribution ledger
+
+The ledger records which text of each note a Duet agent wrote. The contribution lens shows it.
+
+**What it records.** All text that a Duet agent writes into a shared note: its edits, its mention replies, and its parts of a conversation note. The only source is the transaction origin of a change to a shared note. An `AgentPeer` (an edit) or `peer.writer` (a reply) means the agent; any other origin, such as the user, Obsidian or the disk, means no agent. The ledger records no author for other text. A change by another program, such as an agent that Duet did not start, is not attributed. The ledger does not detect AI-written text.
+
+**Current spans, not a log.** A position in an edit log is correct only for the text at the time of the edit. Every later edit above it moves the text. So the ledger keeps the current spans and moves them through each later change. Spans use character offsets, not line and column, because offsets move through a change with simple arithmetic.
+
+**Whole words.** Character diffs match letters by chance. `# Welcome` → `# Hello from the agent` keeps the `e` and `l`, which would leave them to the user. So a change takes the whole words that it touches: the agent's change makes them the agent's, and any other change makes them no agent's. A letter deleted inside a word counts as a change to the word.
+
+**Changes that Duet does not see.** A note changes while Obsidian is closed, through sync or in another editor. Each ledger file keeps the note text that its spans refer to. When Duet next reads the record, it compares that text with the note and moves the spans through the difference. Words that changed lose their attribution, so the result errs toward "not attributed". The copy of the text is updated at each change, so deleted text can stay in it until then.
+
+**Exact while shared.** While a note is shared, the ledger follows each Yjs change of the note as it happens, in order, so no comparison is needed. The lens of an editor that shows a shared note maps the spans to the editor's text for display only. Only the shared note changes the record.
+
+**Edits to closed notes in conversations.** In a conversation the agent edits files with its own tools. A change merges as the agent's edit only when the note is shared before the change. `SessionOptions.beforeFileChange` runs before a file-editing tool. The conversation shares the named notes there, and the hub releases them when the turn ends. Claude Code runs it as a `PreToolUse` hook and waits for it. Codex waits only when it asks for approval; with the sandbox approval setting, it can apply a change before the note is shared, and that change is not attributed. A shell command that writes a file has no hook. A note that a conversation agent creates with its own tools is the agent's from the start.
+
+**Storage.** One JSON file for each note at `.duet/contributions/<note path>.json`: `{ version, text, spans: [{ from, to, agent, time }] }`. The folder is hidden in Obsidian and moves with the vault in file-based sync. Obsidian Sync does not sync hidden folders. The files follow renames and deletes. A file with no spans left is removed. Saves wait one second after the last change.
+
+**The lens.** In the editor, agent text has a mark with a tooltip that names the agent and the date. Live Preview renders some blocks, such as callouts and tables, as widgets, and a mark inside a widget does not show. A widget that holds agent text gets a bar on its left edge instead. Reading view has no source positions in its rendered text, so it marks whole sections.
+
 ### Node's events module in Electron
 
 In Obsidian's renderer, `AbortController` is the browser's. The Claude Agent SDK calls `events.setMaxListeners(n, signal)`, and Node rejects a browser `AbortSignal`. The bundle maps `events` to `scripts/shims/node-events.cjs`, which forwards everything to Node's module except that `setMaxListeners` skips browser event targets. The plugin does not patch the global module, so other plugins are not affected.

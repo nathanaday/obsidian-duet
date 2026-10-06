@@ -29,6 +29,8 @@ export interface DuetSettings {
   conversationFolder: string;
   /** Agents type their edits into open notes. Off: edits appear at once. */
   animate: boolean;
+  /** The contribution lens marks the text that Duet agents wrote. */
+  lens: boolean;
 }
 
 export const AGENT_COLORS: Record<Harness, string> = { claude: '#d97757', codex: '#4f8cf7' };
@@ -41,6 +43,7 @@ export const DEFAULT_SETTINGS: DuetSettings = {
   idleMinutes: 15,
   conversationFolder: 'Conversations',
   animate: true,
+  lens: false,
 };
 
 /** Fills in settings that older versions of the plugin did not save. */

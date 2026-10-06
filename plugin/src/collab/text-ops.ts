@@ -42,6 +42,27 @@ export function applyOps(text: string, ops: TextOp[]): string {
   return result + text.slice(position);
 }
 
+/** Turns a Yjs text delta into ascending ops on the text before the change. */
+export function deltaOps(delta: { insert?: unknown; delete?: number; retain?: number }[]): TextOp[] {
+  const ops: TextOp[] = [];
+  let position = 0;
+  for (const part of delta) {
+    if (part.retain) {
+      position += part.retain;
+    } else if (part.delete) {
+      const last = ops.at(-1);
+      if (last && last.to === position) last.to += part.delete;
+      else ops.push({ from: position, to: position + part.delete, insert: '' });
+      position += part.delete;
+    } else if (typeof part.insert === 'string') {
+      const last = ops.at(-1);
+      if (last && last.to === position) last.insert += part.insert;
+      else ops.push({ from: position, to: position, insert: part.insert });
+    }
+  }
+  return ops;
+}
+
 /** Shifts ops by `offset` characters. */
 export function shiftOps(ops: TextOp[], offset: number): TextOp[] {
   return ops.map((op) => ({ from: op.from + offset, to: op.to + offset, insert: op.insert }));

@@ -1,6 +1,6 @@
 import type { EditorView } from '@codemirror/view';
 import { around } from 'monkey-around';
-import { type App, MarkdownView, type Plugin, TFile, type Vault } from 'obsidian';
+import { type App, MarkdownView, normalizePath, type Plugin, TFile, type Vault } from 'obsidian';
 import type { AgentPeer } from './agent-peer.ts';
 import { type BindingHost, EditorBinding, setBindingHost } from './binding.ts';
 import { DISK_ORIGIN, SharedNote } from './shared-note.ts';
@@ -13,10 +13,20 @@ const SAVE_DELAY_MS = 300;
 
 /** An agent that may be writing files with its own tools, for example during a conversation turn. */
 export interface DiskWriter {
+  /** The agent's display name. */
+  name: string;
   /** True when the writer may be changing the file now. */
   writes(path: string): boolean;
   /** The writer's peer in the note. */
   peer(note: SharedNote): AgentPeer;
+}
+
+/** Follows the hub's notes, for example to record what agents wrote. */
+export interface HubObserver {
+  /** A note became shared. The returned function runs when the note stops being shared. */
+  shared(note: SharedNote): () => void;
+  /** A writer created a note with its own tools. `text` is the note's text at creation. */
+  created(file: TFile, text: string, writer: DiskWriter): void;
 }
 
 /**
@@ -41,6 +51,8 @@ export class CollabHub implements BindingHost {
   private readonly following = { holder: 'open-editors' };
   private follows = 0;
   private readonly restore: (() => void)[] = [];
+  private readonly observers = new Set<HubObserver>();
+  private readonly detach = new Map<SharedNote, (() => void)[]>();
 
   constructor(private readonly app: App) {}
 
@@ -59,6 +71,11 @@ export class CollabHub implements BindingHost {
       }),
     );
     plugin.registerEvent(this.app.vault.on('delete', (file) => this.notes.has(file.path) && this.dispose(this.notes.get(file.path)!)));
+    plugin.registerEvent(
+      this.app.vault.on('create', (file) => {
+        if (file instanceof TFile && file.extension === 'md' && this.writers.size) void this.adopt(file);
+      }),
+    );
     plugin.registerEvent(this.app.workspace.on('layout-change', () => this.follows > 0 && void this.followOpenEditors()));
 
     const skipReload = (view: MarkdownView, data: string) => this.skipReload(view, data);
@@ -117,6 +134,11 @@ export class CollabHub implements BindingHost {
     );
   }
 
+  observe(observer: HubObserver): () => void {
+    this.observers.add(observer);
+    return () => this.observers.delete(observer);
+  }
+
   /** While a writer is registered, its disk changes play as its edits, and open notes are shared. */
   addWriter(writer: DiskWriter): () => void {
     this.writers.add(writer);
@@ -126,9 +148,22 @@ export class CollabHub implements BindingHost {
       if (!this.writers.delete(writer)) return;
       // Changes on disk can arrive a moment after the tool finishes.
       window.setTimeout(() => {
+        for (const [note, holders] of [...this.holders]) if (holders.has(writer)) this.release(note, writer);
         if (--this.follows === 0) for (const note of [...this.holders.keys()]) this.release(note, this.following);
       }, 1500);
     };
+  }
+
+  /**
+   * Shares the notes that a writer is about to change, until the writer stops. Then a change on disk merges
+   * as the writer's edit, also when no editor shows the note.
+   */
+  async prepare(writer: DiskWriter, paths: string[]): Promise<void> {
+    if (!this.writers.has(writer)) return;
+    for (const path of paths) {
+      const file = this.app.vault.getFileByPath(normalizePath(path));
+      if (file?.extension === 'md') await this.acquire(file, writer);
+    }
   }
 
   /** The editor binding that shows a note, if the note is open. */
@@ -151,11 +186,21 @@ export class CollabHub implements BindingHost {
       author: (target) => this.author(target),
     });
     this.notes.set(file.path, note);
+    this.detach.set(note, [...this.observers].map((observer) => observer.shared(note)));
     note.doc.on('update', (_update: Uint8Array, origin: unknown) => {
       if (origin !== DISK_ORIGIN) this.scheduleSave(note);
     });
     for (const binding of this.bindings) if (binding.file === file) binding.refresh();
     return note;
+  }
+
+  /** Shares a note that a writer created, so its later changes merge as the writer's edits. */
+  private async adopt(file: TFile): Promise<void> {
+    const writer = [...this.writers].find((candidate) => candidate.writes(file.path));
+    if (!writer || this.notes.has(file.path)) return;
+    const text = await this.read(file);
+    for (const observer of this.observers) observer.created(file, text, writer);
+    if (this.writers.has(writer)) await this.acquire(file, writer);
   }
 
   private author(note: SharedNote): AgentPeer | undefined {
@@ -203,6 +248,8 @@ export class CollabHub implements BindingHost {
 
   private dispose(note: SharedNote): void {
     if (this.notes.get(note.path) === note) this.notes.delete(note.path);
+    for (const detach of this.detach.get(note) ?? []) detach();
+    this.detach.delete(note);
     window.clearTimeout(this.lingering.get(note));
     this.lingering.delete(note);
     this.holders.delete(note);

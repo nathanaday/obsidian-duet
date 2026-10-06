@@ -3,6 +3,8 @@ import {
   type CanUseTool,
   createSdkMcpServer,
   type EffortLevel,
+  type HookCallback,
+  type HookCallbackMatcher,
   type McpServerConfig,
   type Options,
   type PermissionMode,
@@ -40,6 +42,8 @@ const STDERR_LIMIT = 4096;
 /** Built-in tools that only read. `access: 'read-only'` limits the session to these. */
 const READ_ONLY_TOOLS = ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch'];
 const FILE_TOOLS = new Set(['Read', 'Edit', 'Write', 'NotebookEdit']);
+/** Built-in tools that change a file, matched by a PreToolUse hook. */
+const FILE_CHANGE_TOOLS = 'Edit|MultiEdit|Write|NotebookEdit';
 
 export async function startClaudeSession(options: ClaudeSessionOptions): Promise<ClaudeSession> {
   const env = await harnessEnvironment({
@@ -105,8 +109,32 @@ export class ClaudeSession extends BaseSession {
         ...(tools && options.sdkOptions?.mcpServers && {
           mcpServers: { ...options.sdkOptions.mcpServers, [tools.name]: this.toolServer(tools) },
         }),
+        ...(options.beforeFileChange && {
+          hooks: {
+            ...options.sdkOptions?.hooks,
+            PreToolUse: [...(options.sdkOptions?.hooks?.PreToolUse ?? []), this.fileChangeHook()],
+          },
+        }),
       },
     });
+  }
+
+  /** Runs `beforeFileChange` before a built-in tool changes a file. Claude Code waits for the hook. */
+  private fileChangeHook(): HookCallbackMatcher {
+    const hook: HookCallback = async (input) => {
+      if (input.hook_event_name !== 'PreToolUse') return {};
+      const { file_path: file, notebook_path: notebook } = (input.tool_input ?? {}) as Record<string, unknown>;
+      const path = typeof file === 'string' ? file : typeof notebook === 'string' ? notebook : undefined;
+      if (path) {
+        try {
+          await this.options.beforeFileChange?.([this.showPath(path)]);
+        } catch {
+          // The change goes ahead.
+        }
+      }
+      return {};
+    };
+    return { matcher: FILE_CHANGE_TOOLS, hooks: [hook] };
   }
 
   private toolServer(tools: ToolSet): McpServerConfig {

@@ -1,9 +1,9 @@
-import { syntaxTree } from '@codemirror/language';
 import { Prec } from '@codemirror/state';
 import { type EditorView, keymap } from '@codemirror/view';
 import { editorInfoField, type TFile } from 'obsidian';
 import { calloutHeader, isCalloutHeader } from './callout.ts';
 import { findMention, type Mention } from './mention.ts';
+import { inCode } from './mention-tags.ts';
 
 export interface TriggeredMention extends Mention {
   file: TFile;
@@ -64,18 +64,9 @@ function mentionAtCursor(view: EditorView, names: string[]) {
   const line = state.doc.lineAt(selection.main.head);
   if (selection.main.head !== line.to) return undefined;
   const mention = findMention(line.text, names);
-  if (!mention || inCode(view, line.from, line.to)) return undefined;
+  if (!mention || inCode(state, line.from + Math.max(line.text.indexOf('@'), 0))) return undefined;
   if (line.number < state.doc.lines && isCalloutHeader(state.doc.line(line.number + 1).text)) return undefined;
   const file = state.field(editorInfoField, false)?.file;
   if (!file) return undefined;
   return { ...mention, line, file };
-}
-
-function inCode(view: EditorView, from: number, to: number): boolean {
-  const tag = view.state.doc.sliceString(from, to).indexOf('@');
-  const node = syntaxTree(view.state).resolveInner(from + Math.max(tag, 0), 1);
-  for (let current: typeof node | null = node; current; current = current.parent) {
-    if (/code|frontmatter|math/i.test(current.name)) return true;
-  }
-  return false;
 }

@@ -282,10 +282,21 @@ export class CodexSession extends BaseSession {
 
   private itemStarted(item: ThreadItem): void {
     this.items.set(item.id, item);
+    // Without an approval request, Codex applies the change without waiting for this call.
+    if (item.type === 'fileChange' && 'changes' in item) void this.beforeFileChange(item.changes.map((change) => this.showPath(change.path)));
     const title = this.describeItem(item);
     if (!title) return;
     const tool = item.type === 'dynamicToolCall' && 'tool' in item ? `${item.namespace}.${item.tool}` : item.type;
     this.emit({ type: 'tool-start', id: item.id, tool, title, ...this.itemDetail(item) });
+  }
+
+  private async beforeFileChange(paths: string[]): Promise<void> {
+    if (!paths.length) return;
+    try {
+      await this.options.beforeFileChange?.(paths);
+    } catch {
+      // The change goes ahead.
+    }
   }
 
   private itemDetail(item: ThreadItem): { detail?: string; paths?: string[] } {
@@ -353,9 +364,10 @@ export class CodexSession extends BaseSession {
         const request = params as FileChangeApprovalParams;
         const item = this.items.get(request.itemId);
         const changes = item && 'changes' in item ? item.changes : [];
-        const paths = changes.map((change) => this.showPath(change.path)).join(', ');
+        const paths = changes.map((change) => this.showPath(change.path));
         const detail = [request.reason, ...changes.map((change) => change.diff)].filter(Boolean).join('\n');
-        const decision = await ask('fileChange', `Edit ${paths || 'files'}`, detail);
+        await this.beforeFileChange(paths);
+        const decision = await ask('fileChange', `Edit ${paths.join(', ') || 'files'}`, detail);
         return { decision: DECISIONS[decision] };
       }
       case 'item/permissions/requestApproval': {
