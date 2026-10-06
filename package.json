@@ -1,6 +1,6 @@
 {
   "name": "obsidian-duet",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Work with Claude Code or Codex in your Obsidian notes, and drive their sessions from a TypeScript app.",
   "license": "MIT",
   "type": "module",
