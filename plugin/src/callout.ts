@@ -1,31 +1,36 @@
 export type ReplyState =
-  | { kind: 'working'; text: string; activity?: string }
+  | { kind: 'working'; text: string }
   | { kind: 'completed'; text: string }
   | { kind: 'stopped'; text: string }
   | { kind: 'failed'; text: string; error: string };
 
-const MARKER = /%%h:([a-z0-9]+)%%/;
+export const CALLOUT_PREFIX = '> [!agent]';
 
-export function newMarker(): string {
-  return Math.random().toString(36).slice(2, 10);
+export function calloutHeader(title: string): string {
+  return `${CALLOUT_PREFIX}+ ${title}`;
 }
 
 /**
- * Renders the reply callout. While the reply is in progress, the title carries a hidden marker
- * (an Obsidian comment) that `findCallout` uses to locate the callout again.
+ * Renders the reply callout. While the agent works, the body grows only at its end as text streams in,
+ * so the note can type it out. The agent's cursor shows what the agent is doing, not the callout.
  */
-export function renderCallout(title: string, state: ReplyState, marker: string): string {
-  const header = `> [!agent]+ ${title}${state.kind === 'working' ? ` %%h:${marker}%%` : ''}`;
-  const body = [bodyText(state)].filter(Boolean).join('\n\n');
-  return [header, ...body.split('\n').map((line) => (line ? `> ${line}` : '>'))].join('\n');
+export function renderCallout(title: string, state: ReplyState): string {
+  const body = bodyText(state);
+  if (!body) return calloutHeader(title);
+  const quoted = quote(body);
+  return `${calloutHeader(title)}\n${state.kind === 'working' ? quoted : quoted.replace(/^> $/gm, '>')}`;
+}
+
+/** Prefixes each line with "> ". Blank lines keep the space, so appended text only appends. */
+export function quote(text: string): string {
+  return `> ${text.replace(/\n/g, '\n> ')}`;
 }
 
 function bodyText(state: ReplyState): string {
-  const text = state.text.trim();
+  const text = state.kind === 'working' ? state.text.trimStart() : state.text.trim();
   switch (state.kind) {
     case 'working':
-      if (state.activity) return [text, inlineCode(state.activity)].filter(Boolean).join('\n\n');
-      return text || '*Thinking…*';
+      return text;
     case 'completed':
       return text || '*No reply.*';
     case 'stopped':
@@ -35,34 +40,7 @@ function bodyText(state: ReplyState): string {
   }
 }
 
-/** Formats text as inline code, with a fence longer than any run of backticks inside it. */
-export function inlineCode(text: string): string {
-  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
-  const fence = '`'.repeat(longest + 1);
-  const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
-  return `${fence}${pad}${text}${pad}${fence}`;
-}
-
-/** Returns the character range of the callout that carries `marker`, from its header to its last line. */
-export function findCallout(text: string, marker: string): { from: number; to: number } | undefined {
-  const lines = text.split('\n');
-  let offset = 0;
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index]!;
-    if (line.startsWith('> [!agent]') && line.match(MARKER)?.[1] === marker) {
-      const from = offset;
-      let to = offset + line.length;
-      for (let next = index + 1; next < lines.length && lines[next]!.startsWith('>'); next++) {
-        to += 1 + lines[next]!.length;
-      }
-      return { from, to };
-    }
-    offset += line.length + 1;
-  }
-  return undefined;
-}
-
 /** True when the line is the header of an agent callout. */
 export function isCalloutHeader(line: string): boolean {
-  return line.startsWith('> [!agent]');
+  return line.startsWith(CALLOUT_PREFIX);
 }

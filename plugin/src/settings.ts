@@ -12,24 +12,47 @@ export interface AgentProfile {
   env: string;
   /** Empty: the harness default. */
   model: string;
+  /** Empty: the model's default. */
+  effort: string;
   approval: ApprovalSetting;
   /** Claude Code only: load the user's own MCP servers and plugins. */
   userTools: boolean;
+  /** Color of the agent's cursor and highlights. */
+  color: string;
 }
 
 export interface HeleniteSettings {
   profiles: AgentProfile[];
-  /** Minutes before an idle agent process closes. Its conversation resumes on the next mention. */
+  /** Minutes before an idle agent process closes. Its conversation resumes on the next message. */
   idleMinutes: number;
+  /** Folder for new conversation notes. */
+  conversationFolder: string;
+  /** Agents type their edits into open notes. Off: edits appear at once. */
+  animate: boolean;
 }
+
+export const AGENT_COLORS: Record<Harness, string> = { claude: '#d97757', codex: '#4f8cf7' };
 
 export const DEFAULT_SETTINGS: HeleniteSettings = {
   profiles: [
-    { name: 'claude', harness: 'claude', executablePath: '', env: '', model: '', approval: 'ask', userTools: false },
-    { name: 'codex', harness: 'codex', executablePath: '', env: '', model: '', approval: 'ask', userTools: false },
+    { name: 'claude', harness: 'claude', executablePath: '', env: '', model: '', effort: '', approval: 'ask', userTools: false, color: AGENT_COLORS.claude },
+    { name: 'codex', harness: 'codex', executablePath: '', env: '', model: '', effort: '', approval: 'ask', userTools: false, color: AGENT_COLORS.codex },
   ],
   idleMinutes: 15,
+  conversationFolder: 'Conversations',
+  animate: true,
 };
+
+/** Fills in settings that older versions of the plugin did not save. */
+export function upgradeSettings(saved: Partial<HeleniteSettings> | undefined): HeleniteSettings {
+  const settings = { ...structuredClone(DEFAULT_SETTINGS), ...saved };
+  settings.profiles = settings.profiles.map((profile) => ({
+    ...DEFAULT_SETTINGS.profiles[0]!,
+    ...profile,
+    color: profile.color || AGENT_COLORS[profile.harness],
+  }));
+  return settings;
+}
 
 const HARNESS_NAMES: Record<Harness, string> = { claude: 'Claude Code', codex: 'Codex' };
 
@@ -67,7 +90,7 @@ export class HeleniteSettingTab extends PluginSettingTab {
 
     containerEl.createEl('p', {
       cls: 'helenite-settings-intro',
-      text: 'Write @name followed by a request on a line of a note, then press Enter. The agent replies in a callout under the line. Each note keeps its own conversation.',
+      text: 'Write @name followed by a request on a line of a note, then press Enter. The agent replies in a callout under the line and can edit that note while you keep typing. For a longer exchange, run "New conversation" from the command palette.',
     });
 
     new Setting(containerEl).setName('Agents').setHeading();
@@ -83,6 +106,26 @@ export class HeleniteSettingTab extends PluginSettingTab {
     );
 
     new Setting(containerEl).setName('General').setHeading();
+
+    new Setting(containerEl)
+      .setName('Conversation folder')
+      .setDesc('Where new conversation notes go.')
+      .addText((text) =>
+        text.setValue(this.plugin.settings.conversationFolder).onChange(async (value) => {
+          this.plugin.settings.conversationFolder = value.trim().replace(/^\/+|\/+$/g, '');
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName('Show agents typing')
+      .setDesc('Agents type their edits into open notes, with a live cursor. Off: edits appear at once, and the cursor still shows where the agent works.')
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.animate).onChange(async (value) => {
+          this.plugin.settings.animate = value;
+          await this.plugin.saveSettings();
+        }),
+      );
 
     new Setting(containerEl)
       .setName('Close idle agents after')
@@ -129,6 +172,16 @@ export class HeleniteSettingTab extends PluginSettingTab {
         }),
       );
 
+    new Setting(group)
+      .setName('Color')
+      .setDesc("The agent's cursor and highlights.")
+      .addColorPicker((picker) =>
+        picker.setValue(profile.color).onChange(async (value) => {
+          profile.color = value;
+          await save();
+        }),
+      );
+
     new Setting(group).setName('Agent').addDropdown((dropdown) =>
       dropdown
         .addOptions(HARNESS_NAMES)
@@ -141,7 +194,10 @@ export class HeleniteSettingTab extends PluginSettingTab {
         }),
     );
 
-    new Setting(group).setName('Approvals').addDropdown((dropdown) =>
+    new Setting(group)
+      .setName('Approvals')
+      .setDesc('For conversation notes. In a mention, the agent can change only the note it was asked in, without asking.')
+      .addDropdown((dropdown) =>
       dropdown
         .addOptions(APPROVALS[profile.harness] as Record<string, string>)
         .setValue(profile.approval)
@@ -153,10 +209,20 @@ export class HeleniteSettingTab extends PluginSettingTab {
 
     new Setting(group)
       .setName('Model')
-      .setDesc('Leave empty for the default model.')
+      .setDesc('Leave empty for the default model. A conversation note can choose its own.')
       .addText((text) =>
         text.setValue(profile.model).onChange(async (value) => {
           profile.model = value.trim();
+          await save();
+        }),
+      );
+
+    new Setting(group)
+      .setName('Effort')
+      .setDesc('How much the model reasons, for example low, medium or high. Leave empty for the default.')
+      .addText((text) =>
+        text.setValue(profile.effort).onChange(async (value) => {
+          profile.effort = value.trim().toLowerCase();
           await save();
         }),
       );

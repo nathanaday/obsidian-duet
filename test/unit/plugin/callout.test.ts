@@ -1,62 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { findCallout, inlineCode, renderCallout } from '../../../plugin/src/callout.ts';
+import { isCalloutHeader, renderCallout } from '../../../plugin/src/callout.ts';
 
 describe('renderCallout', () => {
-  it('shows a placeholder and the marker while the agent works', () => {
-    expect(renderCallout('Claude', { kind: 'working', text: '' }, 'abc')).toBe('> [!agent]+ Claude %%h:abc%%\n> *Thinking…*');
+  it('shows only the header until text arrives', () => {
+    expect(renderCallout('Claude', { kind: 'working', text: '' })).toBe('> [!agent]+ Claude');
   });
 
-  it('shows the current activity as code under the text so far', () => {
-    expect(renderCallout('Claude', { kind: 'working', text: 'Looking.', activity: 'Read Ideas.md' }, 'abc')).toBe(
-      '> [!agent]+ Claude %%h:abc%%\n> Looking.\n>\n> `Read Ideas.md`',
-    );
+  it('only appends while text streams in, so the note can type it out', () => {
+    const steps = ['Hello', 'Hello\n', 'Hello\n\n', 'Hello\n\n- one', 'Hello\n\n- one\n- two'];
+    const rendered = steps.map((text) => renderCallout('Claude', { kind: 'working', text }));
+    for (let index = 1; index < rendered.length; index++) expect(rendered[index]!.startsWith(rendered[index - 1]!)).toBe(true);
+    expect(rendered.at(-1)).toBe('> [!agent]+ Claude\n> Hello\n> \n> - one\n> - two');
   });
 
-  it('fences commands that contain backticks or asterisks', () => {
-    expect(inlineCode('echo `date` *')).toBe('``echo `date` *``');
-    expect(inlineCode('`x`')).toBe('`` `x` ``');
+  it('closes blank lines when the reply is complete', () => {
+    expect(renderCallout('Claude', { kind: 'completed', text: 'Hello\n\nWorld\n' })).toBe('> [!agent]+ Claude\n> Hello\n>\n> World');
   });
 
-  it('drops the marker and quotes every line of the final reply', () => {
-    expect(renderCallout('Codex', { kind: 'completed', text: '- one\n\n- two' }, 'abc')).toBe(
-      '> [!agent]+ Codex\n> - one\n>\n> - two',
-    );
+  it('marks a stopped or failed reply', () => {
+    expect(renderCallout('Codex', { kind: 'stopped', text: 'Part' })).toBe('> [!agent]+ Codex\n> Part\n>\n> *Stopped.*');
+    expect(renderCallout('Codex', { kind: 'failed', text: '', error: 'Rate limited\ndetails' })).toBe('> [!agent]+ Codex\n> *Failed: Rate limited*');
+    expect(renderCallout('Codex', { kind: 'completed', text: '' })).toBe('> [!agent]+ Codex\n> *No reply.*');
   });
 
-  it('notes a stopped or failed reply', () => {
-    expect(renderCallout('Claude', { kind: 'stopped', text: 'Partial' }, 'x')).toBe('> [!agent]+ Claude\n> Partial\n>\n> *Stopped.*');
-    expect(renderCallout('Claude', { kind: 'failed', text: '', error: 'boom\ndetail' }, 'x')).toBe(
-      '> [!agent]+ Claude\n> *Failed: boom*',
-    );
-  });
-});
-
-describe('findCallout', () => {
-  const note = [
-    'Intro',
-    '@claude first',
-    '> [!agent]+ Claude %%h:aaa%%',
-    '> *Thinking…*',
-    '',
-    '@claude second',
-    '> [!agent]+ Claude %%h:bbb%%',
-    '> line one',
-    '>',
-    '> line two',
-    'After',
-  ].join('\n');
-
-  it('finds the callout with the marker, up to its last quoted line', () => {
-    const range = findCallout(note, 'bbb')!;
-    expect(note.slice(range.from, range.to)).toBe('> [!agent]+ Claude %%h:bbb%%\n> line one\n>\n> line two');
-  });
-
-  it('returns undefined when the callout is gone', () => {
-    expect(findCallout(note, 'zzz')).toBeUndefined();
-  });
-
-  it('finds a callout at the end of the note', () => {
-    const range = findCallout('x\n> [!agent]+ Claude %%h:end%%\n> text', 'end')!;
-    expect(range.to).toBe('x\n> [!agent]+ Claude %%h:end%%\n> text'.length);
+  it('recognizes callout headers', () => {
+    expect(isCalloutHeader('> [!agent]+ Claude')).toBe(true);
+    expect(isCalloutHeader('> [!note] Other')).toBe(false);
   });
 });

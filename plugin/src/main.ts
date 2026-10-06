@@ -1,8 +1,12 @@
 import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
-import { AgentManager, type SessionIndex } from './agents.ts';
+import { bindingPlugin } from './collab/binding.ts';
+import { CollabHub } from './collab/hub.ts';
+import { presenceExtensions } from './collab/presence.ts';
+import { ConversationManager } from './conversation/manager.ts';
 import { enterTrigger } from './enter-trigger.ts';
+import { MentionAgents, type SessionIndex } from './mentions.ts';
 import { PermissionPrompts } from './permission-modal.ts';
-import { DEFAULT_SETTINGS, displayName, type HeleniteSettings, HeleniteSettingTab } from './settings.ts';
+import { displayName, type HeleniteSettings, HeleniteSettingTab, upgradeSettings } from './settings.ts';
 
 interface PluginData {
   settings: HeleniteSettings;
@@ -10,24 +14,80 @@ interface PluginData {
 }
 
 export default class HelenitePlugin extends Plugin {
-  settings: HeleniteSettings = structuredClone(DEFAULT_SETTINGS);
+  settings!: HeleniteSettings;
+  hub!: CollabHub;
+  mentions!: MentionAgents;
+  conversations!: ConversationManager;
   private sessions: SessionIndex = {};
-  private agents!: AgentManager;
   private statusEl!: HTMLElement;
 
   async onload(): Promise<void> {
     const data = ((await this.loadData()) ?? {}) as Partial<PluginData>;
-    this.settings = { ...structuredClone(DEFAULT_SETTINGS), ...data.settings };
+    this.settings = upgradeSettings(data.settings);
     this.sessions = data.sessions ?? {};
 
-    this.agents = new AgentManager(this.app, this.sessions, new PermissionPrompts(this.app), {
+    const animate = () => this.settings.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.hub = new CollabHub(this.app);
+    this.hub.install(this, [bindingPlugin, presenceExtensions]);
+
+    const prompts = new PermissionPrompts(this.app);
+    this.conversations = new ConversationManager(this.app, this.hub, prompts, {
+      profiles: () => this.settings.profiles,
+      folder: () => this.settings.conversationFolder,
+      animate,
       idleMinutes: () => this.settings.idleMinutes,
+      onActivity: () => this.updateStatus(),
+    });
+    this.conversations.install(this);
+
+    this.mentions = new MentionAgents(this.app, this.hub, this.sessions, prompts, {
+      idleMinutes: () => this.settings.idleMinutes,
+      animate,
       save: () => this.persist(),
       onActivity: () => this.updateStatus(),
     });
 
     this.statusEl = this.addStatusBarItem();
     this.statusEl.addClass('helenite-status');
+    this.statusEl.addEventListener('click', () => {
+      const working = this.working()[0];
+      if (working) void this.app.workspace.getLeaf(false).openFile(working.file);
+    });
+
+    this.addRibbonIcon('message-square-plus', 'New conversation', () => void this.conversations.create(this.settings.profiles[0]!));
+    this.addCommand({
+      id: 'new-chat',
+      name: 'New conversation',
+      callback: () => void this.conversations.create(this.settings.profiles[0]!),
+    });
+    for (const profile of this.settings.profiles.slice(1)) {
+      this.addCommand({
+        id: `new-chat-${profile.name}`,
+        name: `New conversation with ${displayName(profile)}`,
+        callback: () => void this.conversations.create(profile),
+      });
+    }
+    this.addCommand({
+      id: 'end-chat',
+      name: 'End this conversation',
+      checkCallback: (checking) => {
+        const file = this.activeFile();
+        const controller = file && this.conversations.controller(file);
+        if (!controller || controller.ended) return false;
+        if (!checking) void controller.end();
+        return true;
+      },
+    });
+    this.addCommand({
+      id: 'focus-composer',
+      name: 'Focus the message box',
+      checkCallback: (checking) => {
+        const composer = this.conversations.activeComposer();
+        if (!composer) return false;
+        if (!checking) composer.focus();
+        return true;
+      },
+    });
     this.updateStatus();
 
     this.registerEditorExtension(
@@ -39,7 +99,7 @@ export default class HelenitePlugin extends Plugin {
         },
         (mention) => {
           const profile = this.profile(mention.name);
-          if (profile) void this.agents.ask({ ...mention, profile });
+          if (profile) void this.mentions.ask({ ...mention, profile });
         },
       ),
     );
@@ -51,7 +111,12 @@ export default class HelenitePlugin extends Plugin {
         const file = this.activeFile();
         if (!file) return false;
         if (!checking) {
-          void this.agents.interrupt(file).then((count) => {
+          const controller = this.conversations.controller(file);
+          if (controller?.working) {
+            void controller.interrupt();
+            return true;
+          }
+          void this.mentions.interrupt(file).then((count) => {
             if (!count) new Notice('No agent is working in this note.');
           });
         }
@@ -60,13 +125,25 @@ export default class HelenitePlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'revert',
+      name: "Undo the agent's last changes in this note",
+      checkCallback: (checking) => {
+        const file = this.activeFile();
+        const note = file && this.hub.get(file.path);
+        if (!note?.agentUndo.canUndo()) return false;
+        if (!checking) this.mentions.revert(note);
+        return true;
+      },
+    });
+
+    this.addCommand({
       id: 'new-conversation',
-      name: 'Start a new conversation in this note',
+      name: 'Forget the mention conversation in this note',
       checkCallback: (checking) => {
         const file = this.activeFile();
         if (!file) return false;
         if (!checking) {
-          void this.agents.forget(file).then(() => new Notice('The next mention in this note starts a new conversation.'));
+          void this.mentions.forget(file).then(() => new Notice('The next mention in this note starts a new conversation.'));
         }
         return true;
       },
@@ -76,18 +153,20 @@ export default class HelenitePlugin extends Plugin {
 
     this.registerEvent(
       this.app.vault.on('rename', (file, oldPath) => {
-        if (file instanceof TFile) void this.agents.rename(file, oldPath);
+        if (file instanceof TFile) void this.mentions.rename(file, oldPath);
       }),
     );
   }
 
   async onunload(): Promise<void> {
-    await this.agents.closeAll();
+    await this.conversations.destroy();
+    await this.mentions.closeAll();
+    this.hub.destroy();
   }
 
   async saveSettings(): Promise<void> {
     await this.persist();
-    await this.agents.closeIdle();
+    await this.mentions.closeIdle();
   }
 
   private persist(): Promise<void> {
@@ -102,9 +181,18 @@ export default class HelenitePlugin extends Plugin {
     return this.app.workspace.getActiveViewOfType(MarkdownView)?.file ?? undefined;
   }
 
+  private working(): { name: string; file: TFile }[] {
+    return [
+      ...this.mentions.working,
+      ...this.conversations.working.map((controller) => ({ name: controller.agentName, file: controller.file })),
+    ];
+  }
+
   private updateStatus(): void {
-    const working = this.agents.working;
-    this.statusEl.setText(working ? `${working} ${working === 1 ? 'agent' : 'agents'} working` : '');
-    this.statusEl.toggleClass('is-working', working > 0);
+    if (!this.statusEl) return;
+    const working = this.working();
+    const text = working.length === 1 ? `${working[0]!.name} working in ${working[0]!.file.basename}` : working.length ? `${working.length} agents working` : '';
+    this.statusEl.setText(text);
+    this.statusEl.toggleClass('is-working', working.length > 0);
   }
 }

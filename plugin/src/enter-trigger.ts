@@ -2,14 +2,17 @@ import { syntaxTree } from '@codemirror/language';
 import { Prec } from '@codemirror/state';
 import { type EditorView, keymap } from '@codemirror/view';
 import { editorInfoField, type TFile } from 'obsidian';
-import { isCalloutHeader, newMarker, renderCallout } from './callout.ts';
+import { calloutHeader, isCalloutHeader } from './callout.ts';
 import { findMention, type Mention } from './mention.ts';
 
 export interface TriggeredMention extends Mention {
   file: TFile;
+  view: EditorView;
   /** Zero-based line number of the tagged line. */
   line: number;
-  marker: string;
+  /** Position of the tagged line's start, and of the reply callout's header line. */
+  lineFrom: number;
+  callout: { from: number; to: number };
 }
 
 /**
@@ -29,16 +32,24 @@ export function enterTrigger(
           const mention = mentionAtCursor(view, names());
           if (!mention) return false;
           const { line, file } = mention;
-          const marker = newMarker();
-          const callout = renderCallout(title(mention.name), { kind: 'working', text: '' }, marker);
-          const insert = `\n${callout}\n\n`;
+          const header = calloutHeader(title(mention.name));
+          const insert = `\n${header}\n\n`;
           view.dispatch({
             changes: { from: line.to, insert },
             selection: { anchor: line.to + insert.length },
             scrollIntoView: true,
             userEvent: 'input',
           });
-          onMention({ name: mention.name, prompt: mention.prompt, file, line: line.number - 1, marker });
+          const from = line.to + 1;
+          onMention({
+            name: mention.name,
+            prompt: mention.prompt,
+            file,
+            view,
+            line: line.number - 1,
+            lineFrom: line.from,
+            callout: { from, to: from + header.length },
+          });
           return true;
         },
       },

@@ -1,11 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { launchObsidian, type ObsidianInstance, openAtEnd } from './harness.ts';
 
-const TIMEOUT = 180_000;
+const TIMEOUT = 240_000;
 const SHOTS = process.env.HELENITE_SHOTS;
-const done = (text: string) => !text.includes('%%h:');
 
 describe('Helenite in Obsidian', () => {
   let obsidian: ObsidianInstance;
@@ -18,112 +17,242 @@ describe('Helenite in Obsidian', () => {
     await obsidian?.close();
   });
 
+  afterEach(async () => {
+    // The editor and the shared document must never differ.
+    const drift = await obsidian.page.evaluate(() => {
+      const app = (window as any).app;
+      const hub = app.plugins.plugins.helenite?.hub;
+      const problems: string[] = [];
+      for (const leaf of app.workspace.getLeavesOfType('markdown')) {
+        const note = leaf.view.file && hub?.get(leaf.view.file.path);
+        if (note && note.views.size && leaf.view.editor.getValue() !== note.content) problems.push(leaf.view.file.path);
+      }
+      return problems;
+    });
+    expect(drift).toEqual([]);
+  });
+
+  const page = () => obsidian.page;
+
+  /** Waits until no agent works, then for the editor to settle. */
+  async function idle(timeout = 180_000) {
+    await page().waitForFunction(
+      () => {
+        const plugin = (window as any).app.plugins.plugins.helenite;
+        return plugin.mentions.working.length === 0 && plugin.conversations.working.length === 0;
+      },
+      undefined,
+      { timeout, polling: 250 },
+    );
+    await page().waitForTimeout(600);
+  }
+
   async function mention(note: string, line: string) {
-    await openAtEnd(obsidian.page, note);
-    await obsidian.page.keyboard.type(line);
-    await obsidian.page.keyboard.press('Enter');
+    await openAtEnd(page(), note);
+    await page().keyboard.type(line);
+    await page().keyboard.press('Enter');
+    await page().waitForFunction(() => (window as any).app.plugins.plugins.helenite.mentions.working.length > 0, undefined, { timeout: 10_000 });
   }
 
   async function shot(name: string) {
-    if (SHOTS) await obsidian.page.screenshot({ path: path.join(SHOTS, `obsidian-${name}.png`) });
+    if (SHOTS) await page().screenshot({ path: path.join(SHOTS, `obsidian-${name}.png`) });
   }
 
-  it('answers a mention in a callout under the line', { timeout: TIMEOUT }, async () => {
-    await mention('Ideas.md', '@claude Reply with exactly the word: pineapple');
-
-    const placeholder = await obsidian.waitForNote('Ideas.md', (text) => text.includes('%%h:'), 5_000);
-    expect(placeholder).toMatch(/: pineapple\n> \[!agent\]\+ Claude %%h:\w+%%\n> \*Thinking…\*\n\n$/);
-
-    const text = await obsidian.waitForNote('Ideas.md', (note) => done(note) && /> pineapple/i.test(note));
-    expect(text).toMatch(/@claude Reply with exactly the word: pineapple\n> \[!agent\]\+ Claude\n> pineapple\.?\n\n$/i);
-    await shot('reply');
-  });
-
-  it('continues the same conversation in the same note', { timeout: TIMEOUT }, async () => {
-    await mention('Ideas.md', '@claude Which word did you just reply with? Reply with only that word, in capitals.');
-    const text = await obsidian.waitForNote('Ideas.md', (note) => done(note) && note.includes('PINEAPPLE'));
-    expect(text.match(/\[!agent\]/g)).toHaveLength(2);
-  });
-
-  it('keeps text the user types while the agent replies', { timeout: TIMEOUT }, async () => {
-    await mention('Reading list.md', '@claude List five fruits, one per line, nothing else.');
-    await obsidian.page.keyboard.type('My own line, typed during the reply.');
-    const text = await obsidian.waitForNote('Reading list.md', done);
-    expect(text).toMatch(/> \[!agent\]\+ Claude\n(> .+\n){5}\nMy own line, typed during the reply\.$/);
-  });
-
-  it('asks before writing a file, and writes it when allowed', { timeout: TIMEOUT }, async () => {
-    await mention('Welcome.md', '@claude Use the Write tool to create Tasks.md containing exactly: hello');
-    const modal = await obsidian.page.waitForSelector('.helenite-permission', { timeout: 60_000 });
-    expect(await modal.textContent()).toContain('Claude wants to change a file');
-    expect(await modal.textContent()).toContain('From Welcome.md');
-    await shot('permission');
-    await obsidian.page.keyboard.press('y');
-    await obsidian.waitForNote('Welcome.md', done);
-    expect(readFileSync(path.join(obsidian.vault, 'Tasks.md'), 'utf8').trim()).toBe('hello');
-  });
-
-  it('does not write the file when denied', { timeout: TIMEOUT }, async () => {
-    await mention(
-      'Welcome.md',
-      '@claude Use the Write tool to create Denied.md containing: no. If you are not allowed, say so in one sentence.',
-    );
-    await obsidian.page.waitForSelector('.helenite-permission', { timeout: 60_000 });
-    await obsidian.page.keyboard.press('n');
-    await obsidian.waitForNote('Welcome.md', done);
-    expect(existsSync(path.join(obsidian.vault, 'Denied.md'))).toBe(false);
-  });
-
-  it('keeps its reply when the agent edits the same note', { timeout: TIMEOUT }, async () => {
-    await mention('Meetings/2026-10-02 Standup.md', '@claude Add the line "Status: reviewed" directly under the title of this note. Then reply with: Added.');
-    const modal = await obsidian.page.waitForSelector('.helenite-permission', { timeout: 60_000 });
-    expect(await modal.textContent()).toContain('Claude wants to change a file');
-    await obsidian.page.keyboard.press('y');
-    const text = await obsidian.waitForNote('Meetings/2026-10-02 Standup.md', (note) => done(note) && note.includes('Status: reviewed'));
-    expect(text).toMatch(/^# Standup, October 2\n+Status: reviewed/);
-    expect(text).toMatch(/> \[!agent\]\+ Claude\n> Added/);
-  });
-
-  it('answers with Codex for @codex', { timeout: TIMEOUT }, async () => {
-    await mention('Reading list.md', '@codex Reply with exactly the word: mango');
-    const text = await obsidian.waitForNote('Reading list.md', (note) => done(note) && /> \[!agent\]\+ Codex\n> mango/i.test(note));
-    expect(text).toMatch(/> mango\.?\n\n$/i);
-  });
-
-  it('stops a reply with the Stop command', { timeout: TIMEOUT }, async () => {
-    await mention('Ideas.md', '@claude Run the shell command `sleep 30`, then reply with: finished.');
-    const working = await Promise.race([
-      obsidian.page.waitForSelector('.helenite-permission', { timeout: 60_000 }).then(() => 'asked'),
-      obsidian.waitForNote('Ideas.md', (note) => /%%h:\w+%%\n(>.*\n)*> `Bash sleep 30`/.test(note), 60_000),
-    ]);
-    if (working === 'asked') await obsidian.page.keyboard.press('y');
-    await obsidian.waitForNote('Ideas.md', (note) => /%%h:\w+%%\n(>.*\n)*> `Bash sleep 30`/.test(note), 60_000);
-    await obsidian.page.evaluate(() => (window as any).app.commands.executeCommandById('helenite:stop'));
-    const text = await obsidian.waitForNote('Ideas.md', done, 15_000);
-    expect(text).toMatch(/> \*Stopped\.\*\n\n$/);
-  });
-
-  it('leaves plain Enter and code blocks alone', { timeout: TIMEOUT }, async () => {
-    const before = await obsidian.read('Welcome.md');
-    await openAtEnd(obsidian.page, 'Welcome.md');
-    await obsidian.page.keyboard.type('```\n@claude this is code\n');
-    await obsidian.page.keyboard.type('```\nmail me at ana@claude.ai\n');
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    const text = await obsidian.waitForNote('Welcome.md', () => true);
-    expect(text.slice(before.length)).not.toContain('[!agent]');
-  });
-
-  it('remembers the conversation after the plugin reloads', { timeout: TIMEOUT }, async () => {
-    const data = JSON.parse(readFileSync(path.join(obsidian.vault, '.obsidian/plugins/helenite/data.json'), 'utf8'));
-    expect(data.sessions['Ideas.md'].claude).toMatch(/^[0-9a-f-]{36}$/);
-    await obsidian.page.evaluate(async () => {
-      const plugins = (window as any).app.plugins;
-      await plugins.disablePlugin('helenite');
-      await plugins.enablePlugin('helenite');
+  describe('mentions', () => {
+    it('answers a mention in a callout under the line, with a live cursor', { timeout: TIMEOUT }, async () => {
+      await mention('Ideas.md', '@claude Reply with exactly the word: pineapple');
+      await page().waitForSelector('.helenite-caret', { timeout: 30_000 });
+      expect(await page().textContent('.helenite-caret-flag')).toContain('Claude');
+      await idle();
+      const text = await obsidian.waitForNote('Ideas.md', () => true);
+      expect(text).toMatch(/@claude Reply with exactly the word: pineapple\n> \[!agent\]\+ Claude\n> pineapple\.?\n\n$/i);
+      await shot('reply');
     });
-    await mention('Ideas.md', '@claude Earlier in this conversation you replied with one fruit word. Which? Reply with only that word, in capitals.');
-    const text = await obsidian.waitForNote('Ideas.md', (note) => done(note) && (note.match(/PINEAPPLE/g) ?? []).length >= 2);
-    expect(text).toContain('PINEAPPLE');
-    await shot('note');
+
+    it('continues the same conversation in the same note', { timeout: TIMEOUT }, async () => {
+      await mention('Ideas.md', '@claude Which word did you just reply with? Reply with only that word, in capitals.');
+      await idle();
+      const text = await obsidian.waitForNote('Ideas.md', () => true);
+      expect(text).toContain('> PINEAPPLE');
+      expect(text.match(/\[!agent\]/g)).toHaveLength(2);
+    });
+
+    it('keeps text the user types while the agent replies', { timeout: TIMEOUT }, async () => {
+      await mention('Reading list.md', '@claude List five fruits, one per line, nothing else.');
+      await page().keyboard.type('My own line, typed during the reply.', { delay: 30 });
+      await idle();
+      const text = await obsidian.waitForNote('Reading list.md', () => true);
+      expect(text).toMatch(/> \[!agent\]\+ Claude\n(> .+\n){5}\nMy own line, typed during the reply\.$/);
+    });
+
+    it('edits the note live while the user types, and loses nothing', { timeout: TIMEOUT }, async () => {
+      const typed = 'I keep typing this sentence while the agent edits the list above.';
+      await mention('Ideas.md', '@claude Rewrite each bullet of the list at the top so it is at most eight words. Then reply with: Done.');
+      const typing = page().keyboard.type(typed, { delay: 70 });
+      await page().waitForSelector('.helenite-fresh', { timeout: 90_000 });
+      await shot('edit');
+      await typing;
+      await idle();
+      const text = await obsidian.waitForNote('Ideas.md', () => true);
+      expect(text).toContain(typed);
+      expect(text).not.toContain('Tag an agent on any line of a note and get the answer on the next line.');
+      for (const bullet of text.split('\n# Ideas')[0]!.split('\n').filter((line) => line.startsWith('- '))) {
+        expect(bullet.split(/\s+/).length).toBeLessThanOrEqual(10);
+      }
+      await page().waitForTimeout(2500);
+      expect(await obsidian.read('Ideas.md')).toBe(text);
+    });
+
+    it('reverts the agent\'s last changes with a command', { timeout: TIMEOUT }, async () => {
+      const before = await obsidian.waitForNote('Ideas.md', () => true);
+      await mention('Ideas.md', '@claude Add the line "Reviewed." directly under the "# Ideas" heading. Then reply with: Added.');
+      await idle();
+      expect(await obsidian.waitForNote('Ideas.md', () => true)).toMatch(/# Ideas\n+Reviewed\./);
+      await page().evaluate(() => (window as any).app.commands.executeCommandById('helenite:revert'));
+      const reverted = await obsidian.waitForNote('Ideas.md', (text) => !/# Ideas\n+Reviewed\./.test(text), 5000);
+      // The reply stays; only the edit goes away.
+      expect(reverted.startsWith(before.slice(0, before.indexOf('- ')))).toBe(true);
+      expect(reverted).toContain('> Added');
+    });
+
+    it('cannot change other notes', { timeout: TIMEOUT }, async () => {
+      const welcome = readFileSync(path.join(obsidian.vault, 'Welcome.md'), 'utf8');
+      await mention('Reading list.md', '@claude Append the line "changed" to Welcome.md. If you cannot, say so in one sentence.');
+      await idle();
+      expect(readFileSync(path.join(obsidian.vault, 'Welcome.md'), 'utf8')).toBe(welcome);
+      expect(existsSync(path.join(obsidian.vault, 'changed'))).toBe(false);
+    });
+
+    it('answers with Codex for @codex', { timeout: TIMEOUT }, async () => {
+      await mention('Reading list.md', '@codex Reply with exactly the word: mango');
+      await idle();
+      expect(await obsidian.waitForNote('Reading list.md', () => true)).toMatch(/> \[!agent\]\+ Codex\n> mango\.?\n\n$/i);
+    });
+
+    it('stops a reply with the Stop command', { timeout: TIMEOUT }, async () => {
+      await mention('Ideas.md', '@claude Write a 600 word essay about lighthouses.');
+      await obsidian.waitForNote('Ideas.md', (text) => /lighthouses\.\n> \[!agent\]\+ Claude\n> \S/.test(text), 90_000);
+      await page().evaluate(() => (window as any).app.commands.executeCommandById('helenite:stop'));
+      await idle(15_000);
+      expect(await obsidian.waitForNote('Ideas.md', () => true)).toMatch(/> \*Stopped\.\*\n\n$/);
+    });
+
+    it('leaves plain Enter and code blocks alone', { timeout: TIMEOUT }, async () => {
+      const before = await obsidian.read('Welcome.md');
+      await openAtEnd(page(), 'Welcome.md');
+      await page().keyboard.type('```\n@claude this is code\n');
+      await page().keyboard.type('```\nmail me at ana@claude.ai\n');
+      await page().waitForTimeout(1000);
+      const text = await obsidian.waitForNote('Welcome.md', () => true);
+      expect(text.slice(before.length)).not.toContain('[!agent]');
+    });
+
+    it('remembers the conversation after the plugin reloads', { timeout: TIMEOUT }, async () => {
+      const data = JSON.parse(readFileSync(path.join(obsidian.vault, '.obsidian/plugins/helenite/data.json'), 'utf8'));
+      expect(data.sessions['Ideas.md'].claude).toMatch(/^[0-9a-f-]{36}$/);
+      await page().evaluate(async () => {
+        const plugins = (window as any).app.plugins;
+        await plugins.disablePlugin('helenite');
+        await plugins.enablePlugin('helenite');
+      });
+      await mention('Ideas.md', '@claude Earlier in this conversation you replied with one fruit word. Which? Reply with only that word, in capitals.');
+      await idle();
+      const text = await obsidian.waitForNote('Ideas.md', () => true);
+      expect((text.match(/PINEAPPLE/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe('conversation notes', () => {
+    async function newConversation(command = 'helenite:new-chat') {
+      await page().evaluate((id) => (window as any).app.commands.executeCommandById(id), command);
+      await page().waitForSelector('.helenite-composer textarea', { timeout: 15_000 });
+    }
+
+    async function send(message: string) {
+      await page().focus('.helenite-composer textarea');
+      await page().keyboard.type(message);
+      await page().keyboard.press('Enter');
+      await page().waitForSelector('.helenite-composer.is-working', { timeout: 10_000 });
+    }
+
+    const activePath = () => page().evaluate(() => (window as any).app.workspace.getActiveFile()?.path as string);
+
+    it('writes the exchange into the note and names the note', { timeout: TIMEOUT }, async () => {
+      await newConversation();
+      await send('Read [[Ideas]], then reply with the number of bullets in its first list, as a digit only.');
+      await idle();
+      const file = await activePath();
+      expect(file).toMatch(/^Conversations\/\d{4}-\d{2}-\d{2} Read Ideas, then reply with the number/);
+      const text = await obsidian.waitForNote(file, () => true);
+      expect(text).toMatch(/^---\nhelenite: conversation\nagent: claude\n/);
+      expect(text).toMatch(/\nsession: [0-9a-f-]{36}\n/);
+      expect(text).toContain('> [!user]\n> Read [[Ideas]], then reply');
+      expect(text).toMatch(/> \[!activity\]- .*Read a file.*\n> - Read \[\[Ideas\]\]/);
+      expect(text).toMatch(/\n\d\n\n$/);
+      await shot('conversation');
+    });
+
+    it('asks in the message box before an edit, and edits an open note while the user types in it', { timeout: TIMEOUT }, async () => {
+      const chat = await activePath();
+      // Open Reading list next to the conversation, with the cursor at its end.
+      await page().evaluate(async () => {
+        const app = (window as any).app;
+        const chatLeaf = app.workspace.activeLeaf;
+        const leaf = app.workspace.getLeaf('split', 'vertical');
+        await leaf.openFile(app.vault.getAbstractFileByPath('Reading list.md'), { state: { mode: 'source' } });
+        app.workspace.setActiveLeaf(chatLeaf, { focus: true });
+      });
+      await send('Use your Edit tool to replace the first line of [[Reading list]] with "# Books". Then reply with: Done.');
+      await page().waitForSelector('.helenite-composer.has-approval', { timeout: 90_000 });
+      expect(await page().textContent('.helenite-approval')).toContain('Claude wants to change a file');
+      await shot('approval');
+      // Type in the open note while the agent waits for approval and then edits it.
+      const typed = ' Typed while the agent edits.';
+      await page().evaluate(() => {
+        const app = (window as any).app;
+        const leaf = app.workspace.getLeavesOfType('markdown').find((l: any) => l.view.file?.path === 'Reading list.md');
+        app.workspace.setActiveLeaf(leaf, { focus: true });
+        const editor = leaf.view.editor;
+        editor.setCursor({ line: editor.lastLine(), ch: editor.getLine(editor.lastLine()).length });
+      });
+      await page().keyboard.type(typed, { delay: 40 });
+      await page().evaluate((file) => {
+        const app = (window as any).app;
+        app.workspace.setActiveLeaf(app.workspace.getLeavesOfType('markdown').find((l: any) => l.view.file?.path === file), { focus: true });
+      }, chat);
+      await page().focus('.helenite-composer textarea');
+      await page().keyboard.press('y');
+      await idle();
+      const list = await obsidian.waitForNote('Reading list.md', () => true);
+      expect(list.split('\n')[0]).toBe('# Books');
+      expect(list.trimEnd().endsWith(typed.trim())).toBe(true);
+      await page().waitForTimeout(2500);
+      expect(await obsidian.read('Reading list.md')).toBe(list);
+      expect(await obsidian.waitForNote(chat, () => true)).toMatch(/> \[!activity\]- .*Edited a file[\s\S]*```diff/);
+    });
+
+    it('ends the conversation and keeps the note as a record', { timeout: TIMEOUT }, async () => {
+      const chat = await activePath();
+      await page().evaluate((file) => {
+        const app = (window as any).app;
+        app.workspace.setActiveLeaf(app.workspace.getLeavesOfType('markdown').find((l: any) => l.view.file?.path === file), { focus: true });
+      }, chat);
+      await page().focus('.helenite-composer textarea');
+      await page().keyboard.type('/end');
+      await page().keyboard.press('Escape');
+      await page().keyboard.press('Enter');
+      await page().waitForSelector('.helenite-composer.is-ended', { timeout: 10_000 });
+      expect(await obsidian.waitForNote(chat, (text) => text.includes('status: ended'), 5000)).toContain('status: ended');
+      await shot('ended');
+    });
+
+    it('talks to Codex in a Codex conversation', { timeout: TIMEOUT }, async () => {
+      await newConversation('helenite:new-chat-codex');
+      await send('Reply with exactly the word: kiwi');
+      await idle();
+      const text = await obsidian.waitForNote(await activePath(), () => true);
+      expect(text).toMatch(/^---\nhelenite: conversation\nagent: codex\n/);
+      expect(text).toMatch(/\nkiwi\.?\n\n$/i);
+    });
   });
 });
