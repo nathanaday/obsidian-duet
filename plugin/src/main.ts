@@ -1,5 +1,6 @@
 import type { EditorView } from '@codemirror/view';
 import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
+import type { DuetApi } from './api.ts';
 import { bindingPlugin } from './collab/binding.ts';
 import { CollabHub } from './collab/hub.ts';
 import { presenceExtensions } from './collab/presence.ts';
@@ -10,7 +11,7 @@ import { enterTrigger } from './enter-trigger.ts';
 import { mentionTags, tagPostProcessor, type TagStyle } from './mention-tags.ts';
 import { MentionAgents, type SessionIndex } from './mentions.ts';
 import { PermissionPrompts } from './permission-modal.ts';
-import { displayName, type DuetSettings, DuetSettingTab, upgradeSettings } from './settings.ts';
+import { displayName, type DuetSettings, DuetSettingTab, profileNamed, upgradeSettings } from './settings.ts';
 
 interface PluginData {
   settings: DuetSettings;
@@ -24,6 +25,8 @@ export default class DuetPlugin extends Plugin {
   conversations!: ConversationManager;
   ledger!: ContributionLedger;
   lens!: ContributionLens;
+  /** For other plugins: `app.plugins.getPlugin('duet')?.api`. */
+  api!: DuetApi;
   private sessions: SessionIndex = {};
   private statusEl!: HTMLElement;
   private lensButton!: HTMLElement;
@@ -55,6 +58,12 @@ export default class DuetPlugin extends Plugin {
       onActivity: () => this.updateStatus(),
     });
     this.conversations.install(this);
+    this.api = {
+      version: 1,
+      newConversation: async (options) => ({ path: (await this.conversations.start(options)).path }),
+      conversationStatus: (path) => this.conversations.status(path),
+      onTurnEnd: (path, callback) => this.conversations.onTurnEnd(path, callback),
+    };
 
     this.mentions = new MentionAgents(this.app, this.hub, this.sessions, prompts, {
       idleMinutes: () => this.settings.idleMinutes,
@@ -222,7 +231,7 @@ export default class DuetPlugin extends Plugin {
   }
 
   private profile(name: string) {
-    return this.settings.profiles.find((profile) => profile.name.toLowerCase() === name.toLowerCase());
+    return profileNamed(this.settings.profiles, name);
   }
 
   private activeFile(): TFile | undefined {

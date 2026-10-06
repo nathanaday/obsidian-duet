@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frontmatterEdit, newConversation, renderTurn, summary, titleFrom, userBlock } from '../../../plugin/src/conversation/format.ts';
+import { availablePath, frontmatterEdit, newConversation, noteName, renderTurn, summary, titleFrom, userBlock } from '../../../plugin/src/conversation/format.ts';
 import { TurnTranscript } from '../../../plugin/src/conversation/transcript.ts';
 import { applyOps } from '../../../plugin/src/collab/text-ops.ts';
 
@@ -28,6 +28,23 @@ describe('conversation notes', () => {
   it('names the note after the first message', () => {
     expect(titleFrom('Summarize [[Meetings/Standup|the standup]] and draft: follow-ups for the team please')).toBe('Summarize Meetings Standup and draft follow-ups for');
     expect(titleFrom('Reply with the word one.')).toBe('Reply with the word one');
+  });
+
+  it('makes a given title safe as a note name', () => {
+    expect(noteName(' Ingest: notes/today [draft] ')).toBe('Ingest notes today draft');
+    expect(noteName('.hidden')).toBe('hidden');
+    expect(noteName('///')).toBe('');
+  });
+
+  it('numbers a name that a file already has', () => {
+    const taken = new Set(['Chats/Plan.md', 'Chats/Plan 2.md']);
+    expect(availablePath('Chats/', 'Plan', (path) => taken.has(path))).toBe('Chats/Plan 3.md');
+    expect(availablePath('/', 'Plan', (path) => taken.has(path))).toBe('Plan.md');
+  });
+
+  it('records the user setup of a conversation only when it is on', () => {
+    expect(newConversation({ agent: 'claude', status: 'active', created: 'now', userSetup: true })).toContain('\ncreated: now\nuser-setup: true\n');
+    expect(note).not.toContain('user-setup');
   });
 });
 

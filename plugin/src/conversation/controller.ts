@@ -1,4 +1,4 @@
-import { type App, Notice, normalizePath, type TFile } from 'obsidian';
+import { type App, Notice, type TFile } from 'obsidian';
 import type {
   AgentEvent,
   AgentSession,
@@ -7,14 +7,16 @@ import type {
   ModelOption,
   PermissionDecision,
   PermissionRequest,
+  TurnStatus,
 } from '../../../src/index.ts';
+import type { TurnEnd } from '../api.ts';
 import { activity, Presence, startAgent } from '../agent-session.ts';
 import type { CollabHub, DiskWriter } from '../collab/hub.ts';
 import { LiveRegion } from '../collab/region.ts';
 import { LOCAL_ORIGIN, type SharedNote } from '../collab/shared-note.ts';
 import type { PermissionPrompts } from '../permission-modal.ts';
-import { type AgentProfile, displayName } from '../settings.ts';
-import { frontmatterEdit, renderTurn, titleFrom, userBlock } from './format.ts';
+import { type AgentProfile, displayName, profileNamed } from '../settings.ts';
+import { availablePath, frontmatterEdit, renderTurn, titleFrom, USER_SETUP_KEY, userBlock } from './format.ts';
 import { TurnTranscript } from './transcript.ts';
 
 const INSTRUCTIONS = `You are running inside Obsidian, the note-taking app, through the Duet plugin. Your working directory is the root of the user's vault.
@@ -49,6 +51,8 @@ export const LOCAL_COMMANDS: LocalCommand[] = [
   { name: 'new', description: 'Start a new conversation note' },
   { name: 'end', description: 'End this conversation and keep the note as a record' },
 ];
+
+const LOCAL_NAMES = new Set(LOCAL_COMMANDS.map((command) => command.name));
 
 const MODES: Record<string, ApprovalSetting> = { ask: 'ask', edits: 'accept-edits', plan: 'plan', sandbox: 'sandbox' };
 
@@ -97,6 +101,7 @@ export class ConversationController {
       idleMinutes: () => number;
       newConversation: (profile: AgentProfile) => void;
       onActivity: () => void;
+      onTurnEnd: (turn: TurnEnd) => void;
     },
   ) {
     this.presence = new Presence(this.profile, options.animate);
@@ -113,9 +118,14 @@ export class ConversationController {
   }
 
   get profile(): AgentProfile {
-    const name = this.property('agent')?.toLowerCase();
     const profiles = this.profiles();
-    return profiles.find((profile) => profile.name.toLowerCase() === name) ?? profiles[0]!;
+    return profileNamed(profiles, this.property('agent') ?? '') ?? profiles[0]!;
+  }
+
+  /** The note asks for the user's MCP servers and plugins, whatever the profile's setting. */
+  get userSetup(): boolean {
+    const value = this.properties[USER_SETUP_KEY];
+    return value === true || value === 'true';
   }
 
   get agentName(): string {
@@ -165,7 +175,11 @@ export class ConversationController {
   async send(text: string): Promise<void> {
     const message = text.trim();
     if (!message) return;
-    if (message.startsWith('/') && (await this.runLocal(message))) return;
+    const command = /^\/(\S+)/.exec(message)?.[1];
+    if (command && LOCAL_NAMES.has(command)) {
+      await this.runLocal(message);
+      return;
+    }
     if (this.working) {
       this.queue.push(message);
       this.changed();
@@ -239,6 +253,7 @@ export class ConversationController {
       this.status = undefined;
       new Notice(`${this.agentName} could not start: ${(error as Error).message}`);
       this.changed();
+      this.turnEnded('failed', (error as Error).message);
       return;
     }
     const note = (this.note ??= await this.hub.acquire(this.file, this));
@@ -296,13 +311,13 @@ export class ConversationController {
         }, 1500);
       }
       turn.region.set(this.turnText(turn));
-      if (event.type === 'turn-end') void this.finishTurn(turn);
+      if (event.type === 'turn-end') void this.finishTurn(turn, event.result.status, event.result.error);
     }
     if (event.type === 'closed') {
       this.session = undefined;
       this.starting = undefined;
       this.toldPath = undefined;
-      if (this.turn) void this.finishTurn(this.turn);
+      if (this.turn) void this.finishTurn(this.turn, 'failed', event.error ?? `${this.agentName} stopped.`);
     }
     this.changed();
   }
@@ -312,7 +327,7 @@ export class ConversationController {
     return text ? `${text}\n` : '';
   }
 
-  private async finishTurn(turn: Turn): Promise<void> {
+  private async finishTurn(turn: Turn, status: TurnStatus, error?: string): Promise<void> {
     if (this.turn !== turn) return;
     this.turn = undefined;
     turn.region.set(this.turnText(turn));
@@ -327,12 +342,19 @@ export class ConversationController {
     }, 1200);
     this.changed();
     this.options.onActivity();
+    // The next message starts before listeners hear of the end, so they see the conversation still working.
     const next = this.queue.shift();
-    if (next) await this.run(next);
+    const running = next ? this.run(next) : undefined;
+    this.turnEnded(status, error);
+    if (running) await running;
     else if (!this.holders.size) {
       this.releaseNote();
       this.scheduleIdle();
     }
+  }
+
+  private turnEnded(status: TurnStatus, error?: string): void {
+    this.options.onTurnEnd({ path: this.file.path, status, ...(error && { error }) });
   }
 
   private releaseNote(): void {
@@ -357,7 +379,7 @@ export class ConversationController {
   private ensureSession(): Promise<AgentSession> {
     if (this.session && !this.session.closed) return Promise.resolve(this.session);
     this.starting ??= startAgent(this.app, {
-      profile: this.profile,
+      profile: this.userSetup ? { ...this.profile, userTools: true } : this.profile,
       instructions: INSTRUCTIONS,
       access: 'workspace',
       resume: this.property('session'),
@@ -423,7 +445,7 @@ export class ConversationController {
     });
   }
 
-  private async runLocal(message: string): Promise<boolean> {
+  private async runLocal(message: string): Promise<void> {
     const [, name, argument = ''] = message.match(/^\/(\S+)\s*([\s\S]*)$/) ?? [];
     const value = argument.trim();
     switch (name) {
@@ -431,24 +453,21 @@ export class ConversationController {
         const model = this.models.find((option) => [option.id, option.name].some((candidate) => candidate.toLowerCase() === value.toLowerCase()));
         if (!model) new Notice(value ? `No model named ${value}.` : 'Write /model and a model name, or pick one from the model menu.');
         else await this.setModel(model.isDefault ? undefined : model.id);
-        return true;
+        return;
       }
       case 'effort':
         if (!this.efforts.includes(value.toLowerCase())) new Notice(`Effort levels: ${this.efforts.join(', ') || 'none for this model'}.`);
         else await this.setEffort(value.toLowerCase());
-        return true;
+        return;
       case 'mode':
         if (!MODES[value.toLowerCase()]) new Notice('Modes: ask, edits, plan.');
         else await this.setApproval(MODES[value.toLowerCase()]!);
-        return true;
+        return;
       case 'new':
         this.options.newConversation(this.profile);
-        return true;
+        return;
       case 'end':
         await this.end();
-        return true;
-      default:
-        return false;
     }
   }
 
@@ -472,21 +491,28 @@ export class ConversationController {
     });
   }
 
-  /** Names a new conversation after its first message. */
+  /** Names a new conversation after its first message. A note that has a chosen name keeps it. */
   private async rename(message: string): Promise<void> {
-    if (!/^New conversation/.test(this.file.basename)) return;
-    const folder = this.file.parent?.path ?? '';
-    const base = `${window.moment().format('YYYY-MM-DD')} ${titleFrom(message)}`;
-    for (let n = 1; n < 100; n++) {
-      const path = normalizePath(`${folder}/${n === 1 ? base : `${base} ${n}`}.md`);
-      if (!this.app.vault.getAbstractFileByPath(path)) {
-        await this.app.fileManager.renameFile(this.file, path);
-        return;
-      }
-    }
+    if (!isUnnamed(this.file.basename)) return;
+    const path = availablePath(this.file.parent?.path ?? '', nameFrom(message), (candidate) => Boolean(this.app.vault.getAbstractFileByPath(candidate)));
+    await this.app.fileManager.renameFile(this.file, path);
   }
 
   private changed(): void {
     for (const listener of this.listeners) listener();
   }
+}
+
+/** The name of a conversation note before its first message. */
+export function unnamed(): string {
+  return `New conversation ${window.moment().format('YYYY-MM-DD HHmm')}`;
+}
+
+function isUnnamed(basename: string): boolean {
+  return /^New conversation \d{4}-\d{2}-\d{2} \d{4}( \d+)?$/.test(basename);
+}
+
+/** The name of a conversation note after its first message. */
+export function nameFrom(message: string): string {
+  return `${window.moment().format('YYYY-MM-DD')} ${titleFrom(message)}`;
 }

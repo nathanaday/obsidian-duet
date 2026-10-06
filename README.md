@@ -110,6 +110,46 @@ General settings:
 
 To use a second Claude account, add an agent with the tag `work`, the agent Claude Code, and the environment variable `CLAUDE_CONFIG_DIR=~/.claude-work`.
 
+## API for other plugins
+
+Another Obsidian plugin can start a Duet conversation and follow it. For the types, copy [`plugin/src/api.ts`](plugin/src/api.ts) into your plugin. It imports nothing.
+
+```ts
+import type { DuetApi } from './duet-api';
+
+const duet = (this.app as any).plugins.getPlugin('duet')?.api as DuetApi | undefined;
+if (duet && duet.version >= 1) {
+  const { path } = await duet.newConversation({ message: '/my-plugin:my-skill', loadUserSetup: true });
+  const stop = duet.onTurnEnd(path, (turn) => console.log(turn.status));
+}
+```
+
+| Member | What it does |
+|---|---|
+| `version` | `1`. A later version only adds members. |
+| `newConversation(options)` | Creates a conversation note, opens it in a new tab, and sends `options.message` as the first message. Resolves with `{ path }` when the message is sent. |
+| `conversationStatus(path)` | `working`, `active` (waits for a message), `ended`, or `none` (no conversation note has this path). |
+| `onTurnEnd(path, callback)` | Calls `callback` with `{ path, status, error? }` after each turn. `status` is `completed`, `interrupted` or `failed`. Returns a function that stops the calls. |
+
+Options of `newConversation`:
+
+| Option | Default | What it does |
+|---|---|---|
+| `message` | (required) | The first message. A `/` command runs an agent command, such as a Claude Code skill. |
+| `profile` | the first agent | The tag of a Duet agent, without `@`. |
+| `title` | the date and the first words of the message | The name of the note. |
+| `folder` | the conversation folder setting | The folder of the note. |
+| `open` | `true` | `false` creates the note without opening it. |
+| `loadUserSetup` | `false` | Claude Code only. Starts the agent with the user's MCP servers and plugins, also when the agent's setting is off. The note keeps this choice. |
+
+Limits:
+
+- `api` is undefined when Duet is not installed or is turned off. Get it each time you need it. After Duet turns off, `newConversation` on an old `api` rejects.
+- `newConversation` rejects when the message is empty or when no agent has the tag in `profile`.
+- When the agent cannot start, Duet shows a notice, and the turn ends with the status `failed`.
+- The agent asks for approval as in other conversations: in the message box when the note is open, otherwise in a dialog.
+- A listener follows its note when the user renames it. `conversationStatus` takes the current path.
+
 ## Network use, accounts and privacy
 
 Duet does not connect to the internet. It starts Claude Code or Codex on your computer, and those programs connect to their providers:

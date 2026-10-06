@@ -15,7 +15,12 @@ export interface ConversationProperties {
   session?: string;
   status: 'active' | 'ended';
   created: string;
+  /** Claude Code only: the agent loads the user's MCP servers and plugins. */
+  userSetup?: boolean;
 }
+
+/** The property that turns on the user's MCP servers and plugins for one conversation. */
+export const USER_SETUP_KEY = 'user-setup';
 
 export function newConversation(properties: ConversationProperties): string {
   const lines = [
@@ -26,6 +31,7 @@ export function newConversation(properties: ConversationProperties): string {
     ...(properties.effort ? [`effort: ${properties.effort}`] : []),
     `status: ${properties.status}`,
     `created: ${properties.created}`,
+    ...(properties.userSetup ? [`${USER_SETUP_KEY}: true`] : []),
     'cssclasses:',
     `  - ${CSS_CLASS}`,
     '---',
@@ -58,13 +64,23 @@ export function userBlock(message: string): string {
 
 /** A short title from the first message, for the note's name. */
 export function titleFrom(message: string): string {
-  const words = message
-    .replace(/\[\[([^\]|]+)(\|[^\]]+)?\]\]/g, '$1')
-    .replace(/[\\/:*?"<>|#^[\]`]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
+  const words = noteName(message.replace(/\[\[([^\]|]+)(\|[^\]]+)?\]\]/g, '$1')).split(' ');
   const title = words.slice(0, 7).join(' ').replace(/[.,;!?]+$/, '');
   return title.length > 60 ? `${title.slice(0, 59).trimEnd()}…` : title || 'Conversation';
+}
+
+/** A file name without the characters that Obsidian does not allow in a note name or a link. */
+export function noteName(title: string): string {
+  return title.replace(/[\\/:*?"<>|#^[\]`]/g, ' ').replace(/\s+/g, ' ').trim().replace(/^\.+\s*/, '');
+}
+
+/** The path `<folder>/<name>.md`, with a number after the name when a file has that path. */
+export function availablePath(folder: string, name: string, exists: (path: string) => boolean): string {
+  const prefix = folder.replace(/^\/+|\/+$/g, '');
+  for (let n = 1; ; n++) {
+    const path = `${prefix ? `${prefix}/` : ''}${n === 1 ? name : `${name} ${n}`}.md`;
+    if (!exists(path)) return path;
+  }
 }
 
 export type Step =

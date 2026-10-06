@@ -300,6 +300,34 @@ describe('Duet in Obsidian', () => {
       expect(text).toMatch(/^---\nduet: conversation\nagent: codex\n/);
       expect(text).toMatch(/\nkiwi\.?\n\n$/i);
     });
+
+    it('starts a conversation for another plugin through the API', { timeout: TIMEOUT }, async () => {
+      const result = await page().evaluate(async () => {
+        const app = (window as any).app;
+        const api = app.plugins.getPlugin('duet').api;
+        const { path } = await api.newConversation({ message: 'Reply with exactly the word: plum', title: 'From another plugin', folder: 'Agents' });
+        const working = api.conversationStatus(path);
+        const turn = await new Promise((resolve) => {
+          const stop = api.onTurnEnd(path, (ended: unknown) => {
+            stop();
+            resolve(ended);
+          });
+        });
+        return { version: api.version, path, working, turn, after: api.conversationStatus(path), active: app.workspace.getActiveFile()?.path };
+      });
+      expect(result).toEqual({
+        version: 1,
+        path: 'Agents/From another plugin.md',
+        working: 'working',
+        turn: { path: 'Agents/From another plugin.md', status: 'completed' },
+        after: 'active',
+        active: 'Agents/From another plugin.md',
+      });
+      const text = await obsidian.waitForNote(result.path, () => true);
+      expect(text).toMatch(/^---\nduet: conversation\nagent: claude\n/);
+      expect(text).toContain('> [!user]\n> Reply with exactly the word: plum');
+      expect(text).toMatch(/\nplum\.?\n\n$/i);
+    });
   });
 
   describe('settings', () => {

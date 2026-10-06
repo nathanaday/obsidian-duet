@@ -75,6 +75,12 @@ export function parseEnv(text: string): Record<string, string> {
   return env;
 }
 
+/** The profile with a tag, in any letter case. */
+export function profileNamed(profiles: AgentProfile[], name: string): AgentProfile | undefined {
+  const tag = name.replace(/^@/, '').toLowerCase();
+  return profiles.find((profile) => profile.name.toLowerCase() === tag);
+}
+
 export function displayName(profile: AgentProfile): string {
   return profile.name.charAt(0).toUpperCase() + profile.name.slice(1);
 }

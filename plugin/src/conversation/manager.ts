@@ -1,10 +1,11 @@
 import { type App, MarkdownView, normalizePath, type Plugin, TFile } from 'obsidian';
+import type { ConversationStatus, NewConversationOptions, TurnEnd } from '../api.ts';
 import type { CollabHub } from '../collab/hub.ts';
 import type { PermissionPrompts } from '../permission-modal.ts';
-import type { AgentProfile } from '../settings.ts';
+import { type AgentProfile, profileNamed } from '../settings.ts';
 import { Composer } from './composer.ts';
-import { ConversationController } from './controller.ts';
-import { KIND, KIND_KEY, newConversation } from './format.ts';
+import { ConversationController, nameFrom, unnamed } from './controller.ts';
+import { availablePath, KIND, KIND_KEY, newConversation, noteName } from './format.ts';
 
 export interface ConversationOptions {
   profiles: () => AgentProfile[];
@@ -14,10 +15,25 @@ export interface ConversationOptions {
   onActivity: () => void;
 }
 
+export interface CreateOptions {
+  /** Default: a placeholder name, which the first message replaces. */
+  name?: string;
+  /** Default: the conversation folder setting. */
+  folder?: string;
+  /** Where the note opens. Default: the current tab. */
+  open?: 'current' | 'tab' | false;
+  userSetup?: boolean;
+}
+
+/** How long to wait for the metadata cache to read a new note. */
+const INDEX_TIMEOUT_MS = 5000;
+
 /** Finds conversation notes in open views, gives each view a composer, and creates new conversations. */
 export class ConversationManager {
   private readonly controllers = new Map<TFile, ConversationController>();
   private readonly composers = new Map<MarkdownView, Composer>();
+  private readonly turnListeners = new Map<TFile, Set<(turn: TurnEnd) => void>>();
+  private destroyed = false;
 
   constructor(
     private readonly app: App,
@@ -50,15 +66,10 @@ export class ConversationManager {
   }
 
   /** Creates a conversation note and opens it, with the cursor in the composer. */
-  async create(profile: AgentProfile): Promise<void> {
-    const folder = normalizePath(this.options.folder() || '/');
+  async create(profile: AgentProfile, options: CreateOptions = {}): Promise<TFile> {
+    const folder = normalizePath((options.folder ?? this.options.folder()) || '/');
     if (folder !== '/' && !this.app.vault.getAbstractFileByPath(folder)) await this.app.vault.createFolder(folder);
-    const stamp = window.moment();
-    let path = '';
-    for (let n = 1; ; n++) {
-      path = normalizePath(`${folder}/New conversation ${stamp.format('YYYY-MM-DD HHmm')}${n > 1 ? ` ${n}` : ''}.md`);
-      if (!this.app.vault.getAbstractFileByPath(path)) break;
-    }
+    const path = availablePath(folder, options.name ?? unnamed(), (candidate) => Boolean(this.app.vault.getAbstractFileByPath(candidate)));
     const file = await this.app.vault.create(
       path,
       newConversation({
@@ -66,17 +77,62 @@ export class ConversationManager {
         model: profile.model || undefined,
         effort: profile.effort || undefined,
         status: 'active',
-        created: stamp.format('YYYY-MM-DD HH:mm'),
+        created: window.moment().format('YYYY-MM-DD HH:mm'),
+        userSetup: options.userSetup,
       }),
     );
-    const leaf = this.app.workspace.getLeaf(false);
-    await leaf.openFile(file, { state: { mode: 'source' } });
-    // The metadata cache reads the new file a moment later.
-    for (let attempt = 0; attempt < 40 && !this.composers.has(leaf.view as MarkdownView); attempt++) {
-      await new Promise((resolve) => window.setTimeout(resolve, 50));
+    // A controller reads its agent from the note's properties.
+    await this.indexed(file);
+    const open = options.open ?? 'current';
+    if (open) {
+      const leaf = this.app.workspace.getLeaf(open === 'tab' ? 'tab' : false);
+      await leaf.openFile(file, { state: { mode: 'source' }, active: true });
       this.sync();
+      this.composers.get(leaf.view as MarkdownView)?.focus();
     }
-    this.composers.get(leaf.view as MarkdownView)?.focus();
+    return file;
+  }
+
+  /** Creates a conversation note for another plugin and sends its first message. */
+  async start(options: NewConversationOptions): Promise<TFile> {
+    if (this.destroyed) throw new Error('Duet is turned off.');
+    const message = typeof options.message === 'string' ? options.message.trim() : '';
+    if (!message) throw new Error('A new conversation needs a message.');
+    const profiles = this.options.profiles();
+    const profile = options.profile === undefined ? profiles[0] : profileNamed(profiles, options.profile);
+    if (!profile) {
+      throw new Error(options.profile === undefined ? 'Duet has no agents.' : `Duet has no agent named ${options.profile}. Agents: ${profiles.map((p) => p.name).join(', ')}.`);
+    }
+    const file = await this.create(profile, {
+      name: (typeof options.title === 'string' && noteName(options.title)) || nameFrom(message),
+      folder: options.folder,
+      open: options.open === false ? false : 'tab',
+      userSetup: options.loadUserSetup === true,
+    });
+    void this.controllerFor(file).send(message);
+    return file;
+  }
+
+  status(path: string): ConversationStatus {
+    const file = this.app.vault.getFileByPath(normalizePath(path));
+    if (!this.isConversation(file)) return 'none';
+    const controller = this.controllers.get(file);
+    if (controller?.working) return 'working';
+    const ended = controller ? controller.ended : this.app.metadataCache.getFileCache(file)?.frontmatter?.status === 'ended';
+    return ended ? 'ended' : 'active';
+  }
+
+  /** Follows the note, not the path, so a rename keeps the listener. */
+  onTurnEnd(path: string, listener: (turn: TurnEnd) => void): () => void {
+    const file = this.app.vault.getFileByPath(normalizePath(path));
+    if (!file) return () => undefined;
+    let listeners = this.turnListeners.get(file);
+    if (!listeners) this.turnListeners.set(file, (listeners = new Set()));
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+      if (!listeners.size && this.turnListeners.get(file) === listeners) this.turnListeners.delete(file);
+    };
   }
 
   /** The composer of the active view, if it shows a conversation. */
@@ -86,6 +142,8 @@ export class ConversationManager {
   }
 
   async destroy(): Promise<void> {
+    this.destroyed = true;
+    this.turnListeners.clear();
     for (const composer of this.composers.values()) composer.destroy();
     this.composers.clear();
     await Promise.all([...this.controllers.values()].map((controller) => controller.destroy()));
@@ -117,6 +175,7 @@ export class ConversationManager {
         idleMinutes: this.options.idleMinutes,
         newConversation: (profile) => void this.create(profile),
         onActivity: this.options.onActivity,
+        onTurnEnd: (turn) => this.turnEnded(file, turn),
       });
       controller.subscribe(this.options.onActivity);
       this.controllers.set(file, controller);
@@ -124,7 +183,32 @@ export class ConversationManager {
     return controller;
   }
 
+  private turnEnded(file: TFile, turn: TurnEnd): void {
+    for (const listener of [...(this.turnListeners.get(file) ?? [])]) {
+      try {
+        listener(turn);
+      } catch (error) {
+        console.error('Duet: a turn-end listener failed', error);
+      }
+    }
+  }
+
+  /** Resolves when the metadata cache shows the note as a conversation, or after a timeout. */
+  private indexed(file: TFile): Promise<void> {
+    if (this.isConversation(file)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => {
+        this.app.metadataCache.offref(ref);
+        window.clearTimeout(timer);
+        resolve();
+      };
+      const ref = this.app.metadataCache.on('changed', (changed) => changed === file && done());
+      const timer = window.setTimeout(done, INDEX_TIMEOUT_MS);
+    });
+  }
+
   private async dispose(file: TFile): Promise<void> {
+    this.turnListeners.delete(file);
     const controller = this.controllers.get(file);
     if (!controller) return;
     this.controllers.delete(file);

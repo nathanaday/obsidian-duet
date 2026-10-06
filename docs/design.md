@@ -163,6 +163,7 @@ approval: plan         # optional; otherwise the profile's setting
 session: <id>          # the harness session, for resuming
 status: active         # or ended
 created: 2026-10-05 14:02
+user-setup: true       # optional; loads the user's MCP servers and plugins
 cssclasses:
   - duet-conversation
 ```
@@ -176,6 +177,18 @@ The body is Markdown:
 The message box is a DOM element in the note view, not part of the note. It sends messages, suggests slash commands after `/` and notes after `[[`, shows approval requests, and changes the model, effort and approval mode for the next turns. A message sent during a turn waits until the turn ends. Before a turn, the plugin adds one line break at the end of the note and writes the turn before it, so text that the user types at the very end stays outside the turn.
 
 The plugin names a new conversation after its first message, before it sends the message. The first message of each agent process ends with the line `Conversation note: <path> (do not edit it)`, and so does the next message after a rename. The instructions say that the agent can change every other file with its own tools. It keeps the agent process while a view shows the note; an idle process closes after the idle time, and the next message resumes the session from `session`.
+
+### API for other plugins
+
+Duet is the one plugin that puts agents in the editor. A second plugin with its own Yjs hub would bind the same editors and wrap `Vault.modify` again. So a plugin such as Atlas starts a Duet conversation through `plugin.api` instead of running its own agents. `plugin/src/api.ts` holds the types and imports nothing, so another plugin can copy it.
+
+The API uses the code path of the New conversation command: `ConversationManager.start` calls `create` and then `send` on the note's controller. Some details:
+
+- **The path is final at once.** The API names the note when it creates it, from `title` or from the message, so the first message does not rename it. The controller renames only notes with the placeholder name `New conversation <date> <time>`.
+- **The agent is known before the first message.** `create` waits until the metadata cache reads the new note, because the controller reads its agent from the note's properties.
+- **Status without a race.** `send` decides synchronously whether a message is a Duet command, so the conversation is `working` when `newConversation` resolves. When a turn ends with a message in the queue, the next turn starts before the listeners run, so a listener sees `working`.
+- **Listeners follow the note.** `onTurnEnd` keeps listeners by `TFile`, so a rename keeps them. An error in a listener goes to the console and does not stop the turn.
+- **User setup per conversation.** `loadUserSetup` writes `user-setup: true` into the note. Each agent process of the note then starts as if the agent's setting "Load my MCP servers and plugins" were on, also after the idle close.
 
 ### One conversation per note (mentions)
 
@@ -226,6 +239,8 @@ In Obsidian's renderer, `AbortController` is the browser's. The Claude Agent SDK
 A new profile has no app update, so Obsidian would run the version that its installer contains, which can be older than the plugin's `minAppVersion`. The harness copies the newest `obsidian-<version>.asar` from Obsidian's own data folder into the test profile, so the tests run the version that the user runs. Obsidian ignores a symbolic link there. In Obsidian 1.14, the settings open in a separate window; a test that uses the settings waits for that window.
 
 On macOS, Obsidian shows menus as native menus by default. Screenshots do not include them.
+
+The unit tests in `test/unit/plugin/` are type-checked with `plugin/tsconfig.json`. Under the root configuration, Node's module resolution loads the CodeMirror types twice, once for Obsidian's CommonJS types and once for the plugin's ES modules, and the two copies do not match.
 
 ## Licensing and accounts
 

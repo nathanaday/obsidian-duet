@@ -5,5 +5,5 @@
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["src", "../src"]
+  "include": ["src", "../src", "../test/unit/plugin"]
 }
