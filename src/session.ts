@@ -21,6 +21,11 @@ export interface SessionOptions {
   resume?: string;
   /** Called when the agent wants to use a tool that needs approval. With no handler, the session denies the request. */
   onPermission?: PermissionHandler;
+  /**
+   * Called when the agent asks the user questions, with Claude Code's `AskUserQuestion` tool. Without a handler,
+   * the agent is told to ask in its reply. Codex does not ask questions this way.
+   */
+  onQuestion?: QuestionHandler;
   /** Tools that run inside the app. The agent calls them like its built-in tools, without approval. */
   tools?: ToolSet;
   /**
@@ -115,6 +120,36 @@ export type PermissionDecision = 'allow' | 'allow-session' | 'deny';
 
 export type PermissionHandler = (request: PermissionRequest) => Promise<PermissionDecision>;
 
+export interface Question {
+  /** The full question. Answers are keyed by this text. */
+  question: string;
+  /** Very short label, at most 12 characters, for example `Approach`. */
+  header: string;
+  /** Two to four choices. The user can also write an answer of their own. */
+  options: QuestionOption[];
+  /** The user can pick more than one option. */
+  multiSelect: boolean;
+}
+
+export interface QuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface QuestionRequest {
+  questions: Question[];
+  /** Aborts when the harness no longer needs the answers, for example after an interrupt. */
+  signal: AbortSignal;
+}
+
+/**
+ * Answers keyed by question text. An answer is an option label, the user's own text, or for a multi-select
+ * question several of these joined with ", ". Undefined when the user does not answer.
+ */
+export type QuestionAnswers = Record<string, string>;
+
+export type QuestionHandler = (request: QuestionRequest) => Promise<QuestionAnswers | undefined>;
+
 export type TurnStatus = 'completed' | 'interrupted' | 'failed';
 
 export interface TurnResult {
@@ -175,7 +210,10 @@ export interface AgentSession {
   models(): Promise<ModelOption[]>;
   /** Slash commands that `send` accepts, for example `/review`. */
   commands(): Promise<CommandOption[]>;
-  /** Changes settings for the next turns. Omitted fields stay as they are; `null` returns to the default. */
+  /**
+   * Changes settings. Omitted fields stay as they are; `null` returns to the default. Claude Code applies a new
+   * approval mode at once, also to the request that waits for approval; other changes apply from the next turn.
+   */
   configure(settings: SessionSettings): Promise<void>;
 }
 

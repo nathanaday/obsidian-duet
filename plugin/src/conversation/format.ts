@@ -152,6 +152,7 @@ function verb(tool: string): string {
   if (/^(Bash|commandExecution)$/.test(tool)) return 'Ran {n} command{s}';
   if (/^(WebSearch|webSearch)$/.test(tool)) return 'Searched the web';
   if (/^WebFetch$/.test(tool)) return 'Read {n} web page{s}';
+  if (tool === 'AskUserQuestion') return 'Asked you questions';
   return 'Used {n} tool{s}';
 }
 
@@ -170,12 +171,14 @@ function renderStep(step: Step): string {
 function stepTitle(step: Extract<Step, { kind: 'tool' }>): string {
   const path = step.paths?.[0];
   if (path && /\.md$/.test(path)) return `${step.title.split(' ')[0]} [[${path.replace(/\.md$/, '')}]]`;
+  if (step.tool === 'AskUserQuestion') return step.title;
   return inlineCode(step.title);
 }
 
 function stepBody(step: Extract<Step, { kind: 'tool' }>): string | undefined {
   if (step.detail && /^[ +-]/m.test(step.detail) && /^(Edit|Write|fileChange)$/.test(step.tool)) return fence(step.detail, 'diff');
   if (/^(Bash|commandExecution)$/.test(step.tool) && step.output?.trim()) return fence(clip(step.output), '');
+  if (step.tool === 'AskUserQuestion' && step.ok && step.output?.trim()) return step.output.trim().split('\n').map((line) => `- ${line}`).join('\n');
   if (step.ok === false && step.output?.trim()) return fence(clip(step.output), '');
   return undefined;
 }

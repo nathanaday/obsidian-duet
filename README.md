@@ -59,13 +59,16 @@ Run **Duet: New conversation**, or select the ribbon button. You get a note with
 - **Send:** press Enter. Shift+Enter starts a new line. A message that you send while the agent works waits for the current turn to end.
 - **Link notes:** type `[[` to pick a note. The agent reads linked notes when it needs them.
 - **Commands:** type `/` to see commands. `/model`, `/effort`, `/mode`, `/new` and `/end` belong to Duet. The other commands come from the agent, for example your Claude Code skills.
-- **Model, effort and approvals:** use the buttons under the message box. Your choice applies to the next turns and is saved in the note's properties.
+- **Model, effort and approvals:** use the buttons under the message box. Your choice is saved in the note's properties. A new model or effort applies from the next turn. A new approval mode applies at once, also to a request that waits for you.
+- **Approval modes for Claude Code:** **Ask first** asks before edits and commands. **Accept edits** edits files in the vault without asking, and asks before commands. **Auto** lets Claude Code decide which actions are safe to run without asking. **Plan only** reads and plans, and changes nothing.
 - **Stop:** press Escape in the message box, or select the stop button.
 - **End:** type `/end`, or run **Duet: End this conversation**. The note stays as a record. Select **Continue it** to reopen the conversation.
 
 In a conversation, the agent can change any file in the vault. Before it changes a file or runs a command, the request shows above the message box with the exact change. Press `Y` to allow it once, `A` to allow it for the rest of the conversation, or `N` to deny it.
 
 ![Claude asks before it changes a file](docs/images/approval.png)
+
+When Claude has questions for you, they show above the message box. Pick an option, or write your own answer, and press Enter. Select **Skip** to answer nothing. The note records the questions and your answers.
 
 When the agent changes a note that is open, you see its cursor in that note. Its changes merge with the text that you type at the same time.
 
@@ -147,7 +150,7 @@ Limits:
 - `api` is undefined when Duet is not installed or is turned off. Get it each time you need it. After Duet turns off, `newConversation` on an old `api` rejects.
 - `newConversation` rejects when the message is empty or when no agent has the tag in `profile`.
 - When the agent cannot start, Duet shows a notice, and the turn ends with the status `failed`.
-- The agent asks for approval as in other conversations: in the message box when the note is open, otherwise in a dialog.
+- The agent asks for approval and asks its questions as in other conversations: in the message box when the note is open, otherwise in a dialog.
 - A listener follows its note when the user renames it. `conversationStatus` takes the current path.
 
 ## Network use, accounts and privacy

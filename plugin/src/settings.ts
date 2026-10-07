@@ -60,7 +60,7 @@ export function upgradeSettings(saved: Partial<DuetSettings> | undefined): DuetS
 const HARNESS_NAMES: Record<Harness, string> = { claude: 'Claude Code', codex: 'Codex' };
 
 const APPROVALS: Record<Harness, Partial<Record<ApprovalSetting, string>>> = {
-  claude: { ask: 'Ask before edits and commands', 'accept-edits': 'Allow edits, ask before commands', plan: 'Plan only' },
+  claude: { ask: 'Ask before edits and commands', 'accept-edits': 'Allow edits, ask before commands', auto: 'Let Claude Code decide what is safe', plan: 'Plan only' },
   codex: { ask: 'Ask before every command', sandbox: 'Ask only outside the sandbox' },
 };
 

@@ -729,6 +729,87 @@ button.duet-send.is-stop svg {
   opacity: 0.6;
 }
 
+/* The agent's questions, in the composer and in the dialog. Colors follow the surrounding text. */
+.duet-questions {
+  margin: 0;
+}
+
+.duet-question {
+  margin: 10px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.duet-question-text {
+  margin-bottom: 6px;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+.duet-question-header {
+  margin-right: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-medium);
+}
+
+.duet-question-option {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 8px;
+  cursor: var(--cursor);
+}
+
+.duet-question-option:has(input:checked) {
+  border-color: color-mix(in srgb, currentColor 55%, transparent);
+  background: color-mix(in srgb, currentColor 7%, transparent);
+}
+
+.duet-question-option input[type='radio'],
+.duet-question-option input[type='checkbox'] {
+  flex: none;
+  margin: 3px 0 0;
+}
+
+.duet-question-option-text {
+  min-width: 0;
+}
+
+.duet-question-description {
+  font-size: var(--font-ui-smaller);
+  opacity: 0.75;
+}
+
+.duet-question-option.is-other {
+  align-items: center;
+}
+
+.duet-question-other {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+}
+
+.duet-question-other:focus {
+  box-shadow: none;
+}
+
+.duet-questions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .duet-ended {
   display: none;
 }

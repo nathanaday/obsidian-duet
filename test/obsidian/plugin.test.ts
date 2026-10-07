@@ -277,6 +277,38 @@ describe('Duet in Obsidian', () => {
       expect(record.spans.map((span) => welcome.slice(span.from, span.to)).join('')).toContain('Hello from the agent');
     });
 
+    it('shows the agent\'s questions in the message box and sends the answers', { timeout: TIMEOUT }, async () => {
+      const chat = await activePath();
+      await send('Use the AskUserQuestion tool once to ask me which fruit to add, with the options Apple and Pear. Then reply with only the fruit I chose, in capitals.');
+      await page().waitForSelector('.duet-composer.has-approval .duet-questions', { timeout: 90_000 });
+      expect(await page().textContent('.duet-approval')).toContain('Claude asks you');
+      expect(await page().isDisabled('.duet-questions button[type=submit]')).toBe(true);
+      await shot('question');
+      // An answer of the user's own, sent with Enter.
+      await page().click('.duet-question-other');
+      await page().keyboard.type('Plum');
+      await page().keyboard.press('Enter');
+      await page().waitForSelector('.duet-composer:not(.has-approval)', { timeout: 10_000 });
+      await idle();
+      const text = await obsidian.waitForNote(chat, () => true);
+      expect(text).toMatch(/> - Asked you questions\n>\s+- .*→ Plum\n/);
+      expect(text).toMatch(/\nPLUM\.?\n\n$/);
+    });
+
+    it('applies a new approval mode to the request that waits', { timeout: TIMEOUT }, async () => {
+      const chat = await activePath();
+      await page().evaluate(() => (window as any).app.vault.setConfig('nativeMenus', false));
+      await send('Use your Edit tool to replace the first line of [[Ideas]] with "# Ideas, revised". Then use it again to replace that line with "# Ideas, revised twice". Then reply with: Done.');
+      await page().waitForSelector('.duet-composer.has-approval', { timeout: 90_000 });
+      await page().click('.duet-chip:has(.duet-chip-label:text-is("Ask first"))');
+      await page().click('.menu .menu-item:has-text("Accept edits")');
+      await idle();
+      expect(await page().$('.duet-composer.has-approval')).toBeNull();
+      expect(readFileSync(path.join(obsidian.vault, 'Ideas.md'), 'utf8').split('\n')[0]).toBe('# Ideas, revised twice');
+      expect(await obsidian.waitForNote(chat, () => true)).toContain('\napproval: accept-edits\n');
+      expect(await page().$('.duet-chip-label:text-is("Accept edits")')).not.toBeNull();
+    });
+
     it('ends the conversation and keeps the note as a record', { timeout: TIMEOUT }, async () => {
       const chat = await activePath();
       await page().evaluate((file) => {
