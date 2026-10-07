@@ -279,20 +279,28 @@ describe('Duet in Obsidian', () => {
 
     it('shows the agent\'s questions in the message box and sends the answers', { timeout: TIMEOUT }, async () => {
       const chat = await activePath();
-      await send('Use the AskUserQuestion tool once to ask me which fruit to add, with the options Apple and Pear. Then reply with only the fruit I chose, in capitals.');
+      await send('Make one AskUserQuestion tool call with two questions: first which fruit to add, with the options Apple and Pear; then which color, with the options Red and Green. Then reply with only my two answers in capitals, separated by one space.');
       await page().waitForSelector('.duet-composer.has-approval .duet-questions', { timeout: 90_000 });
       expect(await page().textContent('.duet-approval')).toContain('Claude asks you');
+      const visible = () => page().$$eval('.duet-question', (sets) => sets.filter((set) => !(set as HTMLElement).hidden).map((set) => set.textContent));
+      // One question at a time; picking an option moves to the next one.
+      expect(await visible()).toEqual([expect.stringContaining('Pear')]);
+      expect(await page().textContent('.duet-question-progress')).toBe('1 of 2');
       expect(await page().isDisabled('.duet-questions button[type=submit]')).toBe(true);
       await shot('question');
+      await page().click('.duet-question:not([hidden]) .duet-question-option:has-text("Pear")');
+      await page().waitForFunction(() => document.querySelector('.duet-question-progress')?.textContent === '2 of 2');
+      expect(await visible()).toEqual([expect.stringContaining('Green')]);
+      expect(await page().textContent('.duet-questions button[type=submit]')).toContain('Answer');
       // An answer of the user's own, sent with Enter.
-      await page().click('.duet-question-other');
-      await page().keyboard.type('Plum');
+      await page().click('.duet-question:not([hidden]) .duet-question-other');
+      await page().keyboard.type('Blue');
       await page().keyboard.press('Enter');
       await page().waitForSelector('.duet-composer:not(.has-approval)', { timeout: 10_000 });
       await idle();
       const text = await obsidian.waitForNote(chat, () => true);
-      expect(text).toMatch(/> - Asked you questions\n>\s+- .*→ Plum\n/);
-      expect(text).toMatch(/\nPLUM\.?\n\n$/);
+      expect(text).toMatch(/> - Asked you questions\n>\s+- .*→ Pear\n>\s+- .*→ Blue\n/);
+      expect(text).toMatch(/\nPEAR BLUE\.?\n\n$/);
     });
 
     it('applies a new approval mode to the request that waits', { timeout: TIMEOUT }, async () => {

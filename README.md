@@ -68,7 +68,7 @@ In a conversation, the agent can change any file in the vault. Before it changes
 
 ![Claude asks before it changes a file](docs/images/approval.png)
 
-When Claude has questions for you, they show above the message box. Pick an option, or write your own answer, and press Enter. Select **Skip** to answer nothing. The note records the questions and your answers.
+When Claude has questions for you, they show above the message box, one at a time. Pick an option with a click or its number key, or write your own answer and press Enter. A pick on a single-choice question moves to the next question. Select **Back** to change an answer, or **Skip** to answer nothing. The note records the questions and your answers.
 
 When the agent changes a note that is open, you see its cursor in that note. Its changes merge with the text that you type at the same time.
 

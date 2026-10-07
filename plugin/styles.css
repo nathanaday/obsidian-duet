@@ -735,9 +735,22 @@ button.duet-send.is-stop svg {
 }
 
 .duet-question {
+  max-height: min(24rem, 45vh);
   margin: 10px 0 0;
   padding: 0;
+  overflow-y: auto;
   border: 0;
+}
+
+.duet-questions [hidden] {
+  display: none;
+}
+
+.duet-question-progress {
+  align-self: center;
+  margin-left: auto;
+  font-size: var(--font-ui-smaller);
+  opacity: 0.7;
 }
 
 .duet-question-text {
