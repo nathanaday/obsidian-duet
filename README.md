@@ -182,7 +182,13 @@ Open `dev-vault/` as a vault in Obsidian. Other commands:
 | `npm run test:obsidian` | Starts a separate Obsidian with a temporary vault and tests mentions and conversations with Claude Code and Codex. Your own Obsidian and vaults are not touched. |
 | `npm run screenshots` | Captures the images in this README with real agent sessions. |
 
-To release, run `npm version <x.y.z>` and push the tag with `git push --follow-tags`. The release workflow checks the code, builds the plugin and creates a draft GitHub release. Publish the draft to make the version available.
+Work happens on the `preview` branch. `main` takes changes only through a pull request from `preview` whose checks pass. To release a version:
+
+1. On `preview`, run `npm run set-version <x.y.z>`. It sets the version in `manifest.json`, `package.json` and `package-lock.json`, and adds it to `versions.json` with the current `minAppVersion`. A unit test holds the four files to one version.
+2. Open a pull request into `main`. CI runs the type check, the lint, the unit tests and the build. Run `npm run test:obsidian` before you merge, because CI has no Obsidian to run it in.
+3. Merge it. The release workflow checks the code again, tags the commit with the version (no `v`), and publishes `main.js`, `manifest.json` and `styles.css`, which Obsidian's community plugins download. A merge whose version is released already publishes nothing.
+
+Obsidian reads `manifest.json` from `main`. Until the release job ends, about a minute, `main` names a version with no release, and an install in that minute fails once.
 
 The plugin is built on a small TypeScript library in `src/` that starts and drives Claude Code and Codex sessions. Other apps can use it as a package; [duet-demo](https://github.com/nathanaday/duet-demo) is a browser app built on it. The design notes are in [docs/design.md](docs/design.md).
 
