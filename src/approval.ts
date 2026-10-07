@@ -7,12 +7,15 @@ import type { Harness } from './session.ts';
  * - `ask`: ask before edits and commands (Claude Code), or before every command (Codex).
  * - `accept-edits`: Claude Code edits files without asking. Codex treats it as `ask`.
  * - `plan`: Claude Code only reads and plans. Codex treats it as `ask`.
+ * - `auto`: Claude Code decides which actions are safe to run without asking. Codex treats it as `ask`.
  * - `sandbox`: Codex works freely inside its sandbox. Claude Code treats it as `ask`.
  */
-export type ApprovalSetting = 'ask' | 'accept-edits' | 'plan' | 'sandbox';
+export type ApprovalSetting = 'ask' | 'accept-edits' | 'plan' | 'auto' | 'sandbox';
 
-export function claudePermissionMode(setting: ApprovalSetting): 'acceptEdits' | 'plan' | 'default' {
-  return setting === 'accept-edits' ? 'acceptEdits' : setting === 'plan' ? 'plan' : 'default';
+const CLAUDE_MODES = { ask: 'default', 'accept-edits': 'acceptEdits', plan: 'plan', auto: 'auto', sandbox: 'default' } as const;
+
+export function claudePermissionMode(setting: ApprovalSetting): (typeof CLAUDE_MODES)[ApprovalSetting] {
+  return CLAUDE_MODES[setting];
 }
 
 export function codexApprovalPolicy(setting: ApprovalSetting): 'on-request' | 'untrusted' {

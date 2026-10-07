@@ -104,6 +104,15 @@ describe('agent turns', () => {
     expect(renderTurn(turn)).toBe('> [!activity]- Searched files\n> - `Grep todo`\n\n*Stopped.*');
   });
 
+  it('records the agent\'s questions with the user\'s answers', () => {
+    const turn = run([
+      { type: 'tool-start', id: '1', tool: 'AskUserQuestion', title: 'Asked you questions', detail: 'Which fruit?' },
+      { type: 'tool-end', id: '1', ok: true, output: 'Which fruit? → Pear' },
+      { type: 'turn-end', result: { status: 'completed', text: '' } },
+    ]);
+    expect(renderTurn(turn)).toBe('> [!activity]- Asked you questions\n> - Asked you questions\n>   - Which fruit? → Pear');
+  });
+
   it('reports a failed turn', () => {
     const turn = run([{ type: 'turn-end', result: { status: 'failed', text: '', error: 'Overloaded\nretry later' } }]);
     expect(renderTurn(turn)).toBe('> [!failure] The agent stopped with an error\n> Overloaded');

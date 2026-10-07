@@ -31,6 +31,16 @@ An attach transport can come later, behind the same `AgentSession` interface.
 
 The adapters show every approval prompt that the harness sends. Codex sends fewer prompts by default, because its sandbox lets commands write inside the working directory. Set `approvalPolicy: 'untrusted'` to get a prompt for each command.
 
+### A new approval mode applies at once
+
+`configure({ approval })` changes Claude Code's permission mode with `setPermissionMode`. Claude Code checks each tool call when the call starts, so the new mode applies to the calls that follow, also in the current turn. The call that waits for the user was checked under the old mode. When the new mode is `accept-edits` or `auto`, and that mode can approve the waiting call, the adapter aborts the request's `signal` and denies the call with a message that tells the agent to make it again. Claude Code then checks the call under the new mode. The agent repeats one tool call, and the user sees no prompt that the new mode would not show. Approving the waiting call directly would skip Claude Code's own checks, such as protected paths and the safety checks of auto mode.
+
+`auto` is Claude Code's auto mode: Claude Code decides which actions are safe and runs them without asking. Bypass mode is not offered, because Claude Code accepts it only when the session started with it.
+
+### Questions
+
+Claude Code's `AskUserQuestion` tool comes to `canUseTool` like other tools. The adapter sends it to `SessionOptions.onQuestion` and returns the answers as `updatedInput.answers`, keyed by question text. Without the answers, Claude Code tells the agent that the user did not answer. With no handler, or when the user skips, the adapter denies the call with a message that says so. The `tool-end` event of the call has `question → answer` lines as its output, so a transcript can record the exchange.
+
 ## Turns run one at a time
 
 `send` puts the message in a queue. The next turn starts only after the current turn ends. This rule gives each `send` exactly one `TurnResult` and keeps event order simple. Both harnesses can accept a message during a turn (Claude Code merges it into the turn; Codex has `turn/steer`), but the merged result cannot be matched to one `send` call.
@@ -174,7 +184,7 @@ The body is Markdown:
 - Thinking and tool calls between pieces of text go into one collapsed `> [!activity]-` callout. Its title is a summary, for example "Thought for 6s · Read 2 files". Command output and diffs are inside it.
 - The agent's text is plain Markdown.
 
-The message box is a DOM element in the note view, not part of the note. It sends messages, suggests slash commands after `/` and notes after `[[`, shows approval requests, and changes the model, effort and approval mode for the next turns. A message sent during a turn waits until the turn ends. Before a turn, the plugin adds one line break at the end of the note and writes the turn before it, so text that the user types at the very end stays outside the turn.
+The message box is a DOM element in the note view, not part of the note. It sends messages, suggests slash commands after `/` and notes after `[[`, shows approval requests and the agent's questions, and changes the model, effort and approval mode. A request shows in the message box when one is open, otherwise in a dialog. A message sent during a turn waits until the turn ends. Before a turn, the plugin adds one line break at the end of the note and writes the turn before it, so text that the user types at the very end stays outside the turn.
 
 The plugin names a new conversation after its first message, before it sends the message. The first message of each agent process ends with the line `Conversation note: <path> (do not edit it)`, and so does the next message after a rename. The instructions say that the agent can change every other file with its own tools. It keeps the agent process while a view shows the note; an idle process closes after the idle time, and the next message resumes the session from `session`.
 
@@ -257,7 +267,7 @@ Duet does not include either harness. It runs the binary that the user installed
 
 ## Things the adapters do not support yet
 
-- Claude Code's `AskUserQuestion` and `ExitPlanMode` tools come through the permission callback as ordinary tool requests. A UI that wants to answer them needs a dedicated request type.
+- Claude Code's `ExitPlanMode` tool comes through the permission callback as an ordinary tool request. When the user approves it, Claude Code leaves plan mode, but the app's approval setting still says `plan`.
 - Codex `item/tool/requestUserInput` gets an error response. MCP elicitations get `decline`.
 - Images and file attachments in user messages.
 - Subagent activity. The Claude adapter ignores messages that belong to a subagent.

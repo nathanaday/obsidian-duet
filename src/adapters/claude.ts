@@ -25,6 +25,8 @@ import {
   BaseSession,
   type CommandOption,
   type ModelOption,
+  type Question,
+  type QuestionAnswers,
   runTool,
   type SessionOptions,
   type SessionSettings,
@@ -44,6 +46,12 @@ const READ_ONLY_TOOLS = ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch'];
 const FILE_TOOLS = new Set(['Read', 'Edit', 'Write', 'NotebookEdit']);
 /** Built-in tools that change a file, matched by a PreToolUse hook. */
 const FILE_CHANGE_TOOLS = 'Edit|MultiEdit|Write|NotebookEdit';
+/** Approval modes that can approve a waiting request without the user, and the tools that each one approves. */
+const APPROVING_MODES: Partial<Record<PermissionMode, (tool: string) => boolean>> = {
+  acceptEdits: (tool) => FILE_CHANGE_TOOLS.split('|').includes(tool),
+  auto: () => true,
+};
+const RETRY_MESSAGE = 'Not run yet: the user changed the approval mode while this request waited. Make the same tool call again.';
 
 export async function startClaudeSession(options: ClaudeSessionOptions): Promise<ClaudeSession> {
   const env = await harnessEnvironment({
@@ -72,6 +80,10 @@ export class ClaudeSession extends BaseSession {
   private stderr = '';
   private readonly showPath: (file: string) => string;
   private readonly appTools = new Map<string, AgentTool>();
+  /** Approval requests that wait for the user, by tool name. Aborting one sends the request back to Claude Code. */
+  private readonly waiting = new Map<AbortController, string>();
+  /** The user's answers to questions, by tool use id, as `question → answer` lines for the `tool-end` event. */
+  private readonly answers = new Map<string, string>();
 
   constructor(
     private readonly options: ClaudeSessionOptions,
@@ -201,7 +213,12 @@ export class ClaudeSession extends BaseSession {
   async configure(settings: SessionSettings): Promise<void> {
     if (settings.model !== undefined) await this.query.setModel(settings.model ?? undefined);
     if (settings.effort !== undefined) await this.query.applyFlagSettings({ effortLevel: (settings.effort as EffortLevel) ?? null });
-    if (settings.approval) await this.query.setPermissionMode(claudePermissionMode(settings.approval));
+    if (settings.approval) {
+      const mode = claudePermissionMode(settings.approval);
+      await this.query.setPermissionMode(mode);
+      const approves = APPROVING_MODES[mode];
+      if (approves) for (const [retry, tool] of this.waiting) if (approves(tool)) retry.abort();
+    }
   }
 
   private async pump(): Promise<void> {
@@ -251,11 +268,13 @@ export class ClaudeSession extends BaseSession {
         if (typeof content === 'string') break;
         for (const block of content) {
           if (block.type !== 'tool_result') continue;
+          const answers = this.answers.get(block.tool_use_id);
+          this.answers.delete(block.tool_use_id);
           this.emit({
             type: 'tool-end',
             id: block.tool_use_id,
             ok: !block.is_error,
-            output: toolResultText(block.content),
+            output: (!block.is_error && answers) || toolResultText(block.content),
           });
         }
         break;
@@ -288,15 +307,24 @@ export class ClaudeSession extends BaseSession {
     }
   }
 
-  private readonly canUseTool: CanUseTool = async (toolName, input, { signal, suggestions }) => {
+  private readonly canUseTool: CanUseTool = async (toolName, input, { signal, suggestions, toolUseID }) => {
     if (this.appTools.has(toolName)) return { behavior: 'allow', updatedInput: input };
-    const decision = await askPermission(this.options.onPermission, {
-      tool: toolName,
-      title: this.describeTool(toolName, input),
-      detail: this.toolDetail(toolName, input),
-      raw: input,
-      signal,
-    });
+    if (toolName === 'AskUserQuestion') return this.askQuestions(input, signal, toolUseID);
+    // A new approval mode can approve this request. Claude Code decides again when the agent retries it.
+    const retry = new AbortController();
+    const retried = new Promise<'retry'>((resolve) => retry.signal.addEventListener('abort', () => resolve('retry')));
+    this.waiting.set(retry, toolName);
+    const decision = await Promise.race([
+      askPermission(this.options.onPermission, {
+        tool: toolName,
+        title: this.describeTool(toolName, input),
+        detail: this.toolDetail(toolName, input),
+        raw: input,
+        signal: AbortSignal.any([signal, retry.signal]),
+      }),
+      retried,
+    ]).finally(() => this.waiting.delete(retry));
+    if (decision === 'retry') return { behavior: 'deny', message: RETRY_MESSAGE };
     const result: PermissionResult =
       decision === 'deny'
         ? { behavior: 'deny', message: 'The user denied this action.' }
@@ -307,6 +335,22 @@ export class ClaudeSession extends BaseSession {
           };
     return result;
   };
+
+  private async askQuestions(input: Record<string, unknown>, signal: AbortSignal, toolUseID: string): Promise<PermissionResult> {
+    const { onQuestion } = this.options;
+    if (!onQuestion) return { behavior: 'deny', message: 'This app cannot show questions. Ask them in your reply instead.' };
+    const questions = (Array.isArray(input.questions) ? input.questions : []) as Question[];
+    let answers: QuestionAnswers | undefined;
+    try {
+      answers = await onQuestion({ questions, signal });
+    } catch {
+      answers = undefined;
+    }
+    if (!answers || !Object.keys(answers).length) return { behavior: 'deny', message: 'The user closed the questions without answering.' };
+    const lines = questions.filter(({ question }) => answers[question]).map(({ question }) => `${question} → ${answers[question]!.replace(/\s+/g, ' ')}`);
+    this.answers.set(toolUseID, lines.join('\n'));
+    return { behavior: 'allow', updatedInput: { ...input, answers } };
+  }
 
   private toolSummary(name: string, input: Record<string, unknown>) {
     const filePath = typeof input.file_path === 'string' ? input.file_path : input.notebook_path;
@@ -322,6 +366,7 @@ export class ClaudeSession extends BaseSession {
     const appTool = this.appTools.get(name);
     if (appTool) return appTool.title?.(input as never) ?? appTool.name;
     const fields = (input ?? {}) as Record<string, unknown>;
+    if (name === 'AskUserQuestion') return 'Asked you questions';
     if (typeof fields.file_path === 'string') return `${name} ${this.showPath(fields.file_path)}`;
     const subject = fields.command ?? fields.pattern ?? fields.url ?? fields.description;
     return typeof subject === 'string' ? `${name} ${subject}` : name;
@@ -334,6 +379,9 @@ export class ClaudeSession extends BaseSession {
     }
     if (name === 'Write' && typeof input.content === 'string') {
       return input.content.split('\n').map((line) => `+${line}`).join('\n');
+    }
+    if (name === 'AskUserQuestion' && Array.isArray(input.questions)) {
+      return (input.questions as Question[]).map((question) => question.question).join('\n');
     }
     if (name === 'Read' || name === 'Glob' || name === 'Grep') return undefined;
     return JSON.stringify(input, null, 2);

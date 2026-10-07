@@ -7,6 +7,7 @@ import {
   createSession,
   type CreateSessionOptions,
   type PermissionHandler,
+  type QuestionHandler,
   type ToolSet,
 } from '../../src/index.ts';
 import { AgentPeer } from './collab/agent-peer.ts';
@@ -23,6 +24,7 @@ export interface StartOptions {
   effort?: string;
   approval?: ApprovalSetting;
   onPermission?: PermissionHandler;
+  onQuestion?: QuestionHandler;
   beforeFileChange?: (paths: string[]) => Promise<void> | void;
 }
 
@@ -51,6 +53,7 @@ export async function startAgent(app: App, options: StartOptions): Promise<Agent
     tools: options.tools,
     access: options.access,
     onPermission: options.onPermission,
+    onQuestion: options.onQuestion,
     beforeFileChange: options.beforeFileChange,
     ...approvalOptions(profile.harness, options.approval ?? profile.approval),
     ...(profile.harness === 'claude' && { sdkOptions: { strictMcpConfig: !profile.userTools } }),

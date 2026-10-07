@@ -7,6 +7,9 @@ import type {
   ModelOption,
   PermissionDecision,
   PermissionRequest,
+  QuestionAnswers,
+  QuestionRequest,
+  SessionSettings,
   TurnStatus,
 } from '../../../src/index.ts';
 import type { TurnEnd } from '../api.ts';
@@ -33,10 +36,10 @@ How to answer:
 - When the user links notes with [[...]], the message lists their paths. Read them when the request needs them.
 - Wait for commands to finish before you reply. Do not run work in the background.`;
 
-export interface PendingApproval {
-  request: PermissionRequest;
-  decide(decision: PermissionDecision): void;
-}
+/** A request that waits for the user in the composer: an approval or the agent's questions. */
+export type PendingRequest =
+  | { kind: 'approval'; request: PermissionRequest; decide(decision: PermissionDecision): void }
+  | { kind: 'question'; request: QuestionRequest; answer(answers: QuestionAnswers | undefined): void };
 
 export interface LocalCommand {
   name: string;
@@ -67,14 +70,15 @@ interface Turn {
 }
 
 /**
- * Runs one conversation note: its agent session, the transcript in the note, queued messages and
- * approval requests. Composers show its state and send through it.
+ * Runs one conversation note: its agent session, the transcript in the note, queued messages, approval
+ * requests and the agent's questions. Composers show its state and send through it.
  */
 export class ConversationController {
   phase: 'idle' | 'starting' | 'working' = 'idle';
   models: ModelOption[] = [];
   commands: CommandOption[] = [];
-  readonly approvals: PendingApproval[] = [];
+  /** Requests that wait for the user, oldest first. */
+  readonly pending: PendingRequest[] = [];
   readonly queue: string[] = [];
   status: string | undefined;
   private session: AgentSession | undefined;
@@ -196,7 +200,7 @@ export class ConversationController {
 
   async setModel(model: string | undefined): Promise<void> {
     await this.setProperty('model', model);
-    await this.session?.configure({ model: model ?? null });
+    await this.configure({ model: model ?? null });
     const efforts = this.models.find((option) => option.id === model)?.efforts ?? [];
     if (this.effort && efforts.length && !efforts.includes(this.effort)) await this.setEffort(undefined);
     this.changed();
@@ -204,14 +208,31 @@ export class ConversationController {
 
   async setEffort(effort: string | undefined): Promise<void> {
     await this.setProperty('effort', effort);
-    await this.session?.configure({ effort: effort ?? null });
+    await this.configure({ effort: effort ?? null });
     this.changed();
   }
 
   async setApproval(approval: ApprovalSetting): Promise<void> {
+    const previous = this.property('approval');
     await this.setProperty('approval', approval === this.profile.approval ? undefined : approval);
-    await this.session?.configure({ approval });
+    if (!(await this.configure({ approval }))) await this.setProperty('approval', previous);
     this.changed();
+  }
+
+  /**
+   * Applies settings to the session, also to one that is still starting. A session that starts later reads
+   * them from the note. Returns false when the agent refuses them.
+   */
+  private async configure(settings: SessionSettings): Promise<boolean> {
+    const session = this.session ?? (await this.starting?.catch(() => undefined));
+    if (!session || session.closed) return true;
+    try {
+      await session.configure(settings);
+      return true;
+    } catch (error) {
+      new Notice(`${this.agentName} could not change the setting: ${(error as Error).message}`);
+      return false;
+    }
   }
 
   /** Ends the conversation. The note stays as a record. */
@@ -236,7 +257,10 @@ export class ConversationController {
 
   async destroy(): Promise<void> {
     window.clearTimeout(this.idleTimer);
-    for (const approval of this.approvals.splice(0)) approval.decide('deny');
+    for (const pending of [...this.pending]) {
+      if (pending.kind === 'approval') pending.decide('deny');
+      else pending.answer(undefined);
+    }
     await this.closeSession();
     this.releaseNote();
   }
@@ -387,6 +411,7 @@ export class ConversationController {
       effort: this.property('effort'),
       approval: this.approval,
       onPermission: (request) => this.ask(request),
+      onQuestion: (request) => this.question(request),
       // Shares a note before the agent's tool changes it, so the change merges as the agent's edit.
       beforeFileChange: (paths) => this.turn && this.hub.prepare(this.turn.writer, paths),
     })
@@ -428,19 +453,29 @@ export class ConversationController {
   /** Shows an approval request in the composer, or in a dialog when no composer is open. */
   private ask(request: PermissionRequest): Promise<PermissionDecision> {
     if (!this.holders.size) return this.prompts.ask(request, { agent: this.agentName, notePath: this.file.path });
+    return this.wait(request.signal, 'deny', (decide) => ({ kind: 'approval', request, decide }));
+  }
+
+  /** Shows the agent's questions in the composer, or in a dialog when no composer is open. */
+  private question(request: QuestionRequest): Promise<QuestionAnswers | undefined> {
+    if (!this.holders.size) return this.prompts.question(request, { agent: this.agentName, notePath: this.file.path });
+    return this.wait(request.signal, undefined as QuestionAnswers | undefined, (answer) => ({ kind: 'question', request, answer }));
+  }
+
+  /** Adds a request to `pending` until the user settles it or the agent no longer needs it. */
+  private wait<T>(signal: AbortSignal, fallback: T, make: (settle: (value: T) => void) => PendingRequest): Promise<T> {
     return new Promise((resolve) => {
-      const approval: PendingApproval = {
-        request,
-        decide: (decision) => {
-          const index = this.approvals.indexOf(approval);
-          if (index < 0) return;
-          this.approvals.splice(index, 1);
-          resolve(decision);
-          this.changed();
-        },
+      const settle = (value: T) => {
+        const index = this.pending.indexOf(pending);
+        if (index < 0) return;
+        this.pending.splice(index, 1);
+        resolve(value);
+        this.changed();
       };
-      request.signal.addEventListener('abort', () => approval.decide('deny'));
-      this.approvals.push(approval);
+      const pending = make(settle);
+      this.pending.push(pending);
+      signal.addEventListener('abort', () => settle(fallback));
+      if (signal.aborted) settle(fallback);
       this.changed();
     });
   }

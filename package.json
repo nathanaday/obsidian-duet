@@ -29,7 +29,7 @@
     "plugin:dev": "node scripts/dev-vault.mjs && node scripts/plugin.mjs --vault dev-vault --watch",
     "test:obsidian": "vitest run test/obsidian",
     "screenshots": "tsx scripts/screenshots/capture.ts",
-    "version": "node scripts/version.mjs && git add manifest.json versions.json",
+    "set-version": "node scripts/set-version.mjs",
     "prepare": "npm run build:lib"
   },
   "dependencies": {

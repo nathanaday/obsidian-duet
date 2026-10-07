@@ -1,10 +1,11 @@
 import type { EditorView } from '@codemirror/view';
 import { type App, type MarkdownView, Menu, prepareFuzzySearch, Scope, setIcon, setTooltip, type TFile } from 'obsidian';
-import type { ApprovalSetting } from '../../../src/index.ts';
-import { type ConversationController, LOCAL_COMMANDS, type PendingApproval } from './controller.ts';
+import type { ApprovalSetting, PermissionDecision } from '../../../src/index.ts';
+import { renderQuestions } from '../question-form.ts';
+import { type ConversationController, LOCAL_COMMANDS, type PendingRequest } from './controller.ts';
 
-const APPROVAL_NAMES: Record<ApprovalSetting, string> = { ask: 'Ask first', 'accept-edits': 'Accept edits', plan: 'Plan only', sandbox: 'Sandbox' };
-const CLAUDE_MODES: ApprovalSetting[] = ['ask', 'accept-edits', 'plan'];
+const APPROVAL_NAMES: Record<ApprovalSetting, string> = { ask: 'Ask first', 'accept-edits': 'Accept edits', plan: 'Plan only', auto: 'Auto', sandbox: 'Sandbox' };
+const CLAUDE_MODES: ApprovalSetting[] = ['ask', 'accept-edits', 'auto', 'plan'];
 const CODEX_MODES: ApprovalSetting[] = ['ask', 'sandbox'];
 const FILE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit', 'fileChange']);
 /** How close to the end the user must be scrolled for the note to follow new text. */
@@ -18,7 +19,7 @@ interface Suggestion {
 
 /**
  * The message box at the bottom of a conversation note. It sends messages, shows what the agent does,
- * answers approval requests, and changes the model, effort and approval mode. It suggests slash commands
+ * answers approval requests and the agent's questions, and changes the model, effort and approval mode. It suggests slash commands
  * after "/" and notes after "[[".
  */
 export class Composer {
@@ -39,6 +40,8 @@ export class Composer {
   private historyIndex = -1;
   private follow = true;
   private readonly cleanup: (() => void)[] = [];
+  /** The request that `approvalEl` shows. It is drawn again only when it changes, so a half-filled answer stays. */
+  private shown: PendingRequest | undefined;
 
   constructor(
     private readonly app: App,
@@ -147,17 +150,35 @@ export class Composer {
     this.sendButton.toggleClass('is-stop', stop);
     this.sendButton.disabled = !stop && !this.input.value.trim();
     setTooltip(this.sendButton, stop ? 'Stop (Esc)' : 'Send (Enter)', { placement: 'top' });
-    this.renderApproval(controller.approvals[0]);
+    this.renderPending(controller.pending[0]);
   }
 
   private label(button: HTMLButtonElement, text: string): void {
     button.querySelector('.duet-chip-label')!.textContent = text;
   }
 
-  private renderApproval(approval: PendingApproval | undefined): void {
+  private renderPending(pending: PendingRequest | undefined): void {
+    if (pending === this.shown) return;
+    this.shown = pending;
     this.approvalEl.empty();
-    this.root.toggleClass('has-approval', Boolean(approval));
-    if (!approval) return;
+    this.root.toggleClass('has-approval', Boolean(pending));
+    if (pending?.kind === 'approval') this.renderApproval(pending);
+    else if (pending?.kind === 'question') this.renderQuestion(pending);
+  }
+
+  private renderQuestion(pending: Extract<PendingRequest, { kind: 'question' }>): void {
+    const head = this.approvalEl.createDiv({ cls: 'duet-approval-head' });
+    setIcon(head.createSpan({ cls: 'duet-approval-icon' }), 'message-circle-question');
+    head.createSpan({ cls: 'duet-approval-title', text: `${this.controller.agentName} asks you` });
+    const typing = document.activeElement === this.input;
+    const form = renderQuestions(this.approvalEl, pending.request.questions, 'duet-approval-choices', (answers) => {
+      pending.answer(answers);
+      if (typing) this.focus();
+    });
+    if (typing) form.focus();
+  }
+
+  private renderApproval(approval: Extract<PendingRequest, { kind: 'approval' }>): void {
     const { request } = approval;
     const head = this.approvalEl.createDiv({ cls: 'duet-approval-head' });
     setIcon(head.createSpan({ cls: 'duet-approval-icon' }), FILE_TOOLS.has(request.tool) ? 'file-pen' : 'terminal');
@@ -172,7 +193,7 @@ export class Composer {
       }
     }
     const choices = this.approvalEl.createDiv({ cls: 'duet-approval-choices' });
-    const choice = (label: string, key: string, decision: Parameters<PendingApproval['decide']>[0], primary = false) => {
+    const choice = (label: string, key: string, decision: PermissionDecision, primary = false) => {
       const button = choices.createEl('button', { cls: primary ? 'mod-cta' : '' });
       button.createSpan({ text: label });
       button.createEl('kbd', { text: key });
@@ -184,9 +205,9 @@ export class Composer {
   }
 
   private onKey(event: KeyboardEvent): void {
-    const approval = this.controller.approvals[0];
-    if (approval && !this.input.value && !event.metaKey && !event.ctrlKey) {
-      const decision = { y: 'allow', a: 'allow-session', n: 'deny' }[event.key.toLowerCase()] as Parameters<PendingApproval['decide']>[0] | undefined;
+    const approval = this.controller.pending[0];
+    if (approval?.kind === 'approval' && !this.input.value && !event.metaKey && !event.ctrlKey) {
+      const decision = { y: 'allow', a: 'allow-session', n: 'deny' }[event.key.toLowerCase()] as PermissionDecision | undefined;
       if (decision) {
         event.preventDefault();
         approval.decide(decision);

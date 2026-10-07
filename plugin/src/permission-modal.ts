@@ -1,5 +1,6 @@
 import { type App, Modal } from 'obsidian';
-import type { PermissionDecision, PermissionRequest } from '../../src/index.ts';
+import type { PermissionDecision, PermissionRequest, QuestionAnswers, QuestionRequest } from '../../src/index.ts';
+import { renderQuestions } from './question-form.ts';
 
 export interface PermissionContext {
   agent: string;
@@ -15,18 +16,62 @@ function action(tool: string): string {
   return `use ${tool}`;
 }
 
-/** Shows approval requests one at a time. Requests from several notes wait in order. */
+/** Shows approval requests and questions one at a time. Requests from several notes wait in order. */
 export class PermissionPrompts {
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly app: App) {}
 
   ask(request: PermissionRequest, context: PermissionContext): Promise<PermissionDecision> {
-    const answer = this.queue.then(() =>
-      request.signal.aborted ? ('deny' as const) : new PermissionModal(this.app, request, context).result,
-    );
+    return this.enqueue(request.signal, 'deny', () => new PermissionModal(this.app, request, context).result);
+  }
+
+  question(request: QuestionRequest, context: PermissionContext): Promise<QuestionAnswers | undefined> {
+    return this.enqueue(request.signal, undefined, () => new QuestionModal(this.app, request, context).result);
+  }
+
+  private enqueue<T>(signal: AbortSignal, fallback: T, open: () => Promise<T>): Promise<T> {
+    const answer = this.queue.then(() => (signal.aborted ? fallback : open()));
     this.queue = answer.catch(() => undefined);
     return answer;
+  }
+}
+
+class QuestionModal extends Modal {
+  readonly result: Promise<QuestionAnswers | undefined>;
+  private resolve!: (answers: QuestionAnswers | undefined) => void;
+  private decided = false;
+
+  constructor(
+    app: App,
+    private readonly request: QuestionRequest,
+    private readonly context: PermissionContext,
+  ) {
+    super(app);
+    this.result = new Promise((resolve) => {
+      this.resolve = resolve;
+    });
+    request.signal.addEventListener('abort', () => this.decide(undefined));
+    this.open();
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass('duet-permission', 'duet-question-modal');
+    this.titleEl.setText(`${this.context.agent} asks you`);
+    this.contentEl.createEl('p', { cls: 'duet-permission-note', text: `From ${this.context.notePath}` });
+    renderQuestions(this.contentEl, this.request.questions, 'duet-permission-choices', (answers) => this.decide(answers)).focus();
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    this.decide(undefined);
+  }
+
+  private decide(answers: QuestionAnswers | undefined): void {
+    if (this.decided) return;
+    this.decided = true;
+    this.resolve(answers);
+    this.close();
   }
 }
 

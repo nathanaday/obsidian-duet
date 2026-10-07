@@ -277,6 +277,46 @@ describe('Duet in Obsidian', () => {
       expect(record.spans.map((span) => welcome.slice(span.from, span.to)).join('')).toContain('Hello from the agent');
     });
 
+    it('shows the agent\'s questions in the message box and sends the answers', { timeout: TIMEOUT }, async () => {
+      const chat = await activePath();
+      await send('Make one AskUserQuestion tool call with two questions: first which fruit to add, with the options Apple and Pear; then which color, with the options Red and Green. Then reply with only my two answers in capitals, separated by one space.');
+      await page().waitForSelector('.duet-composer.has-approval .duet-questions', { timeout: 90_000 });
+      expect(await page().textContent('.duet-approval')).toContain('Claude asks you');
+      const visible = () => page().$$eval('.duet-question', (sets) => sets.filter((set) => !(set as HTMLElement).hidden).map((set) => set.textContent));
+      // One question at a time; picking an option moves to the next one.
+      expect(await visible()).toEqual([expect.stringContaining('Pear')]);
+      expect(await page().textContent('.duet-question-progress')).toBe('1 of 2');
+      expect(await page().isDisabled('.duet-questions button[type=submit]')).toBe(true);
+      await shot('question');
+      await page().click('.duet-question:not([hidden]) .duet-question-option:has-text("Pear")');
+      await page().waitForFunction(() => document.querySelector('.duet-question-progress')?.textContent === '2 of 2');
+      expect(await visible()).toEqual([expect.stringContaining('Green')]);
+      expect(await page().textContent('.duet-questions button[type=submit]')).toContain('Answer');
+      // An answer of the user's own, sent with Enter.
+      await page().click('.duet-question:not([hidden]) .duet-question-other');
+      await page().keyboard.type('Blue');
+      await page().keyboard.press('Enter');
+      await page().waitForSelector('.duet-composer:not(.has-approval)', { timeout: 10_000 });
+      await idle();
+      const text = await obsidian.waitForNote(chat, () => true);
+      expect(text).toMatch(/> - Asked you questions\n>\s+- .*→ Pear\n>\s+- .*→ Blue\n/);
+      expect(text).toMatch(/\nPEAR BLUE\.?\n\n$/);
+    });
+
+    it('applies a new approval mode to the request that waits', { timeout: TIMEOUT }, async () => {
+      const chat = await activePath();
+      await page().evaluate(() => (window as any).app.vault.setConfig('nativeMenus', false));
+      await send('Use your Edit tool to replace the first line of [[Ideas]] with "# Ideas, revised". Then use it again to replace that line with "# Ideas, revised twice". Then reply with: Done.');
+      await page().waitForSelector('.duet-composer.has-approval', { timeout: 90_000 });
+      await page().click('.duet-chip:has(.duet-chip-label:text-is("Ask first"))');
+      await page().click('.menu .menu-item:has-text("Accept edits")');
+      await idle();
+      expect(await page().$('.duet-composer.has-approval')).toBeNull();
+      expect(readFileSync(path.join(obsidian.vault, 'Ideas.md'), 'utf8').split('\n')[0]).toBe('# Ideas, revised twice');
+      expect(await obsidian.waitForNote(chat, () => true)).toContain('\napproval: accept-edits\n');
+      expect(await page().$('.duet-chip-label:text-is("Accept edits")')).not.toBeNull();
+    });
+
     it('ends the conversation and keeps the note as a record', { timeout: TIMEOUT }, async () => {
       const chat = await activePath();
       await page().evaluate((file) => {
