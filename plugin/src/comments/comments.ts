@@ -34,7 +34,7 @@ export class Comments {
     const { plugin } = this;
     const { app } = plugin;
     this.store.install(plugin);
-    plugin.yami.hub.observe(this.store);
+    plugin.yami.hub?.observe(this.store);
     this.store.onChange((path) => this.marks.refresh(path));
     plugin.registerEditorExtension(this.marks.extension());
     plugin.registerView(

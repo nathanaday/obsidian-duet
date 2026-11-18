@@ -55,6 +55,7 @@ export default class DuetPlugin extends Plugin {
       conversationFolder: () => this.settings.conversationFolder,
       idleMinutes: () => this.settings.idleMinutes,
       animate: () => this.settings.animate,
+      collab: true,
       wikiModule: false,
       threads: false,
       commands: { sessions: false, wiki: false, modules: false },
@@ -63,7 +64,7 @@ export default class DuetPlugin extends Plugin {
 
     this.ledger = new ContributionLedger(this.app);
     this.ledger.install(this);
-    this.yami.hub.observe(this.ledger);
+    this.yami.hub?.observe(this.ledger);
     this.lens = new ContributionLens(this.app, this.ledger, () => this.settings.lens);
     this.ledger.onChange((path) => this.lens.refresh(path));
     this.registerEditorExtension([this.lens.extension(), mentionTags(() => this.tagStyles())]);
@@ -111,7 +112,8 @@ export default class DuetPlugin extends Plugin {
 
     this.registerEditorExtension(
       enterTrigger(
-        () => this.settings.profiles.map((profile) => profile.name),
+        // With no hub, a mention has nothing to write its reply through, so Enter stays Enter.
+        () => (this.yami.hub ? this.settings.profiles.map((profile) => profile.name) : []),
         (name) => {
           const profile = this.profile(name);
           return profile ? displayName(profile) : name;

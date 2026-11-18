@@ -113,15 +113,21 @@ export interface MentionOptions {
  * request, with a live cursor.
  */
 export class MentionAgents {
-  private readonly hub: CollabHub;
+  private readonly shared: CollabHub | undefined;
   private readonly notes: NoteSessions<LiveSession>;
 
   constructor(
     private readonly yami: ObsidianYami,
     private readonly options: MentionOptions,
   ) {
-    this.hub = yami.hub;
+    this.shared = yami.hub;
     this.notes = yami.noteSessions({ ids: options.ids, save: (ids) => options.save(ids), setup: (note) => this.setup(note) });
+  }
+
+  /** The window's hub. Yami gives none while another plugin has it, and then no mention runs. */
+  private get hub(): CollabHub {
+    if (!this.shared) throw new Error('live editing is off in this window, because another plugin has it. Update your Yami plugins, then restart Obsidian.');
+    return this.shared;
   }
 
   private setup({ file, agent }: NoteAgent): NoteSessionSetup<LiveSession> {

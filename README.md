@@ -246,7 +246,7 @@ Open `dev-vault/` as a vault in Obsidian. Other commands:
 
 ### How Duet Uses Yami
 
-Duet keeps only what is its own: mentions, agent profiles and settings, comments, the vault's skills and agents, the contribution record and lens, and the API. Yami's `createYami` gives it the shared documents, conversation notes and their commands, approval prompts, and the status bar, and `yami/esbuild` gives the bundle options and stylesheet. Duet turns off Yami's built-in wiki and threads modules, which belong to Yami Wiki and Yami Threads. `package.json` installs Yami from the `.tgz` of a Yami GitHub release, so `npm install` needs no checkout of Yami; a Duet change that needs a newer Yami waits for that Yami release. The design notes are in [docs/design.md](docs/design.md).
+Duet keeps only what is its own: mentions, agent profiles and settings, comments, the vault's skills and agents, the contribution record and lens, and the API. Yami's `createYami` gives it the shared documents, conversation notes and their commands, approval prompts, and the status bar, and `yami/esbuild` gives the bundle options and stylesheet. Duet turns off Yami's built-in wiki and threads modules, which belong to Yami Wiki and Yami Threads. Duet asks for the window's shared documents (`collab: true`), which one plugin of a window can have; when a plugin on an older Yami has them, Duet shows a notice, mentions stay off, and conversation notes are written through the vault. `package.json` installs Yami from the `.tgz` of a Yami GitHub release, so `npm install` needs no checkout of Yami; a Duet change that needs a newer Yami waits for that Yami release. The design notes are in [docs/design.md](docs/design.md).
 
 ### Branches and Releases
 
