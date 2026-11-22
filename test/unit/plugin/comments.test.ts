@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { diffOps } from 'yami/document';
-import { applyChange, lineAt, mapRange, openThreads, passage, reconcile, type NoteComments } from '../../../plugin/src/comments/model.ts';
+import { applyChange, awaitedAgent, lineAt, mapRange, openThreads, passage, reconcile, type NoteComments } from '../../../plugin/src/comments/model.ts';
 
 const thread = (from: number, to: number, author: 'user' | 'agent' = 'user') => ({ id: 't', from, to, comments: [{ id: 'c', author, text: 'hi', time: '2026-01-01T00:00:00Z' }] });
 
@@ -87,5 +87,22 @@ describe('helpers', () => {
   it('lists the threads whose last comment is the person\'s', () => {
     const comments: NoteComments = { text: 'x', threads: [thread(0, 1), { ...thread(0, 1, 'agent'), id: 'a' }, { id: 'e', from: 0, to: 1, comments: [] }] };
     expect(openThreads(comments).map((t) => t.id)).toEqual(['t']);
+  });
+});
+
+describe('awaitedAgent', () => {
+  const tagOf = (text: string) => (/@claude\b/.test(text) ? 'claude' : undefined);
+  const comment = (author: 'user' | 'agent', text: string) => ({ id: text, author, text, time: '2026-01-01T00:00:00Z' });
+  const withComments = (...comments: ReturnType<typeof comment>[]) => ({ id: 't', from: 0, to: 1, comments });
+
+  it('gives the agent that the last comment of the person tags', () => {
+    expect(awaitedAgent(withComments(comment('user', '@claude explain')), tagOf)).toBe('claude');
+    expect(awaitedAgent(withComments(comment('user', '@claude a'), comment('agent', 'b'), comment('user', '@claude c')), tagOf)).toBe('claude');
+  });
+
+  it('gives none once the agent replied, or when the last comment tags no agent', () => {
+    expect(awaitedAgent(withComments(comment('user', '@claude explain'), comment('agent', 'done')), tagOf)).toBeUndefined();
+    expect(awaitedAgent(withComments(comment('user', '@claude a'), comment('user', 'just a note')), tagOf)).toBeUndefined();
+    expect(awaitedAgent(withComments(), tagOf)).toBeUndefined();
   });
 });

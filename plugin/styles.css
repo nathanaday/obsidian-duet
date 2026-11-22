@@ -230,6 +230,14 @@
   color: var(--text-error);
 }
 
+.duet-comment-item.is-unanswered .duet-comment-body {
+  color: var(--text-muted);
+}
+
+.duet-retry {
+  justify-content: flex-start;
+}
+
 .duet-reply {
   margin-top: var(--size-4-2);
 }

@@ -17,6 +17,10 @@ export interface CommentsViewOptions {
   agentTags(): string[];
   /** The person posted a comment. The host runs an agent when the comment tags one. */
   onComment(path: string, thread: Thread, comment: Comment, comments: NoteComments): void;
+  /** The tag of the agent that a thread waits on: its last comment is the person's and tags that agent. */
+  awaitedAgent(thread: Thread): string | undefined;
+  /** The person asks the agent of a thread's last comment again, after it failed or never answered. */
+  onRetry(path: string, thread: Thread, comments: NoteComments): void;
   /** The person wants to see a thread's passage in the note. */
   reveal(path: string, thread: Thread): void;
   /** The thread that the view shows changed, so the editors restyle their highlights. */
@@ -194,7 +198,8 @@ export class CommentsView extends ItemView {
     remove.addEventListener('click', () => void this.removeThread(path, thread));
 
     for (const comment of thread.comments) this.renderComment(card, path, thread, comment);
-    if (pending) this.renderPending(card, pending);
+    if (pending) this.renderPending(card, path, thread, pending);
+    else this.renderUnanswered(card, path, thread);
     this.renderReply(card, path, thread);
   }
 
@@ -260,7 +265,7 @@ export class CommentsView extends ItemView {
     void MarkdownRenderer.render(this.app, comment.text, body, path, this.rendered);
   }
 
-  private renderPending(card: HTMLElement, pending: PendingReply): void {
+  private renderPending(card: HTMLElement, path: string, thread: Thread, pending: PendingReply): void {
     const item = card.createDiv({ cls: `duet-comment-item is-agent is-pending${pending.state === 'failed' ? ' is-failed' : ''}` });
     const head = item.createDiv({ cls: 'duet-comment-head' });
     head.createSpan({ cls: 'duet-comment-author', text: this.options.agentName(pending.agent) });
@@ -268,6 +273,29 @@ export class CommentsView extends ItemView {
     const body = item.createDiv({ cls: 'duet-comment-body' });
     if (pending.text) body.setText(pending.text);
     if (pending.error) body.createDiv({ cls: 'duet-comment-error', text: pending.error.split('\n')[0]! });
+    if (pending.state === 'failed' && this.options.awaitedAgent(thread)) this.renderRetry(item, path, thread, 'Retry');
+  }
+
+  /**
+   * A thread whose last comment tags an agent that is not working on it: the run failed before Obsidian
+   * restarted, or it stopped with no reply. The failure is not saved, so the thread offers to ask again.
+   */
+  private renderUnanswered(card: HTMLElement, path: string, thread: Thread): void {
+    const agent = this.options.awaitedAgent(thread);
+    if (!agent) return;
+    const name = this.options.agentName(agent);
+    const item = card.createDiv({ cls: 'duet-comment-item is-agent is-unanswered' });
+    item.createDiv({ cls: 'duet-comment-body', text: `${name} has not replied.` });
+    this.renderRetry(item, path, thread, `Ask ${name} again`);
+  }
+
+  private renderRetry(item: HTMLElement, path: string, thread: Thread, label: string): void {
+    const actions = item.createDiv({ cls: 'duet-comment-actions duet-retry' });
+    const button = actions.createEl('button', { text: label });
+    button.addEventListener('click', () => {
+      button.disabled = true;
+      this.options.onRetry(path, thread, this.comments);
+    });
   }
 
   private renderReply(card: HTMLElement, path: string, thread: Thread): void {
