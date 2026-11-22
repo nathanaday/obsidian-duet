@@ -95,6 +95,16 @@ export function openThreads(comments: NoteComments): Thread[] {
   return comments.threads.filter((thread) => thread.comments.length && thread.comments.at(-1)!.author === 'user');
 }
 
+/**
+ * The agent that a thread still waits on: the last comment is the person's and tags an agent, as `tagOf` finds
+ * it, and no reply of that agent followed. A run that failed, or one lost when Obsidian closed, leaves such a
+ * thread, and the person can ask the agent again.
+ */
+export function awaitedAgent(thread: Thread, tagOf: (text: string) => string | undefined): string | undefined {
+  const last = thread.comments.at(-1);
+  return last?.author === 'user' ? tagOf(last.text) : undefined;
+}
+
 /** The name of an author as the view shows it: the agent's tag with a capital, as the reply callouts do. */
 export function displayAuthor(tag: string): string {
   return tag.charAt(0).toUpperCase() + tag.slice(1);

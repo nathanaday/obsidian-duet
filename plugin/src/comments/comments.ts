@@ -4,7 +4,7 @@ import type { MentionAgents } from '../mentions.ts';
 import type { AgentProfile } from '../settings.ts';
 import type DuetPlugin from '../main.ts';
 import { CommentMarks } from './marks.ts';
-import { type Comment, displayAuthor, type NoteComments, openThreads, type Thread } from './model.ts';
+import { awaitedAgent, type Comment, displayAuthor, type NoteComments, openThreads, type Thread } from './model.ts';
 import { CommentStore } from './store.ts';
 import { COMMENTS_VIEW, CommentsView } from './view.ts';
 
@@ -46,6 +46,8 @@ export class Comments {
           color: (thread) => this.color(thread),
           agentTags: () => plugin.settings.profiles.map((profile) => profile.name),
           onComment: (path, thread, comment, comments) => this.posted(path, thread, comment, comments),
+          awaitedAgent: (thread) => awaitedAgent(thread, (text) => this.taggedProfile(text)?.name),
+          onRetry: (path, thread, comments) => this.retry(path, thread, comments),
           reveal: (path, thread) => this.marks.reveal(path, thread),
           onActiveChange: (path) => this.marks.refresh(path),
         }),
@@ -151,12 +153,27 @@ export class Comments {
 
   /** The person posted a comment. A tag of an agent in it runs the agent on the passage. */
   private posted(path: string, thread: Thread, comment: Comment, comments: NoteComments): void {
-    const names = this.plugin.settings.profiles.map((profile) => profile.name);
-    const tag = findTags(comment.text, names)[0];
-    const profile = tag && this.plugin.settings.profiles.find((candidate) => candidate.name === tag.name);
+    this.ask(path, thread, comment, comments);
+  }
+
+  /** Runs the agent of a thread's last comment again, for a thread whose agent failed or never answered. */
+  private retry(path: string, thread: Thread, comments: NoteComments): void {
+    const last = thread.comments.at(-1);
+    if (last?.author === 'user') this.ask(path, thread, last, comments);
+  }
+
+  private ask(path: string, thread: Thread, comment: Comment, comments: NoteComments): void {
+    const profile = this.taggedProfile(comment.text);
     const file = this.plugin.app.vault.getFileByPath(path);
     if (!profile || !file) return;
     void this.mentions().askInThread({ file, profile, thread, comments });
+  }
+
+  /** The agent that a comment tags first, or none. */
+  private taggedProfile(text: string): AgentProfile | undefined {
+    const { profiles } = this.plugin.settings;
+    const tag = findTags(text, profiles.map((profile) => profile.name))[0];
+    return tag && profiles.find((candidate) => candidate.name === tag.name);
   }
 
   private async handleAll(file: TFile, text: string, profile: AgentProfile): Promise<void> {

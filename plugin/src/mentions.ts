@@ -219,6 +219,8 @@ export class MentionAgents {
   private async sendToThreads(file: TFile, profile: AgentProfile, threadId: string | undefined, prompt: (noteText: string) => string): Promise<void> {
     const { comments } = this.options;
     const reply: Reply = { title: displayName(profile), note: undefined, region: undefined, streaming: '', message: '', line: undefined, thread: { id: threadId, file, agent: profile.name } };
+    // Show the thread as working while the session starts, so the view does not offer to ask again meanwhile.
+    if (threadId) comments.setPending(file.path, threadId, { agent: profile.name, text: '', state: 'working' });
     let live: LiveSession;
     try {
       const [note, started] = await Promise.all([this.hub.acquire(file, reply), this.notes.session(file.path, profile.name)]);
@@ -227,11 +229,12 @@ export class MentionAgents {
       reply.note = note;
       live.presence.peer(note).beginTurn();
     } catch (error) {
-      new Notice(`@${profile.name} could not start: ${(error as Error).message}`);
+      const message = (error as Error).message;
+      new Notice(`@${profile.name} could not start: ${message}`);
+      if (threadId) comments.setPending(file.path, threadId, { agent: profile.name, text: '', state: 'failed', error: message });
       if (reply.note) this.hub.release(reply.note, reply);
       return;
     }
-    if (threadId) comments.setPending(file.path, threadId, { agent: profile.name, text: '', state: 'working' });
     live.replies.push(reply);
     const text = await live.tools.show(() => undefined);
     await live.session.send(prompt(text === undefined ? 'The note has not changed since you last read it.' : `<note>\n${text}\n</note>`)).catch((error: Error) => {
